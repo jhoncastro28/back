@@ -1,0 +1,41 @@
+@startuml ActualizarInventario
+left to right direction
+skinparam backgroundColor White
+skinparam usecase {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    ArrowColor Black
+}
+
+actor Administrador
+actor Vendedor
+
+skinparam actor {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    FontColor Black
+}
+
+rectangle "Actualizar_inventario - SIGMA" {
+    usecase "Actualizar inventario\n―――――――――――――\n<b>extension points</b>\nRegistrar transacción \nen historial" as CU
+    usecase "Registrar transacción en historial" as RT
+    usecase "Mostrar mensaje confirmación" as MC
+    usecase "Actualizar registro" as AR
+    usecase "Validar datos" as VD
+    usecase "Seleccionar producto a actualizar" as SP
+    usecase "Validar rol" as VR
+    usecase "Identificarse" as ID
+}
+
+Administrador -- CU
+Vendedor -- CU
+
+CU ..> (ID) : <<Include>>
+CU ..> (VR) : <<Include>>
+CU ..> (SP) : <<Include>>
+CU ..> (VD) : <<Include>>
+CU ..> (AR) : <<Include>>
+CU ..> (MC) : <<Include>>
+CU <.. (RT) : <<Extend>>
+
+@enduml

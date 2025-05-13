@@ -1,0 +1,35 @@
+@startuml CrearProducto
+left to right direction
+skinparam backgroundColor White
+skinparam usecase {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    ArrowColor Black
+}
+
+actor Administrador
+actor Vendedor
+
+skinparam actor {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    FontColor Black
+}
+
+rectangle "Crear_producto - SIGMA" {
+    usecase "Crear producto" as CU
+    usecase "Mensaje de confirmación" as MC
+    usecase "Ingresar datos del producto" as ID
+    usecase "Añadir nuevo producto" as AP
+    usecase "Identificar usuario" as IU
+    
+}
+
+Administrador -- CU
+Vendedor -- CU
+
+CU ..> (IU) : <<Include>>
+CU ..> (AP) : <<Include>>
+CU ..> (ID) : <<Include>>
+CU ..> (MC) : <<Include>>
+@enduml

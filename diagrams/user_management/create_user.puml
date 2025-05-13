@@ -1,0 +1,36 @@
+@startuml CrearUsuaio
+title Crear_usuario - SIGMA
+left to right direction
+skinparam backgroundColor White
+skinparam usecase {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    ArrowColor Black
+}
+
+actor Administrador
+
+skinparam actor {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    FontColor Black
+}
+
+rectangle "Crear_usuario - SIGMA" {
+    usecase "Crear Usuario" as CU
+    usecase "Mostrar mensaje\nconfirmación" as MC
+    usecase "Guardar usuario en la\nbase de datos" as GU
+    usecase "Validar datos del formulario" as VF
+    usecase "Validar rol" as VR
+    usecase "Identificarse" as ID
+    
+}
+
+Administrador -- CU
+
+CU ..> (ID) : <<Include>>
+CU ..> (VR) : <<Include>>
+CU ..> (VF) : <<Include>>
+CU ..> (GU) : <<Include>>
+CU ..> (MC) : <<Include>>
+@enduml

@@ -1,0 +1,32 @@
+/**
+ * You must have the following extensions installed
+ * - ESLint --> https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint
+ * - Prettier - Code formatter --> https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode
+ *
+ * If you do not use VSCode use the equivalent rules in your code editor!!!.
+ */
+{
+  "editor.rulers": [80],
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": true,
+
+  // Eslint magic
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnPaste": false,
+    "editor.formatOnSave": false,
+    "javascript.preferences.importModuleSpecifier": "relative"
+  },
+
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnPaste": false,
+    "editor.formatOnSave": false,
+    "typescript.preferences.importModuleSpecifier": "relative"
+  },
+  "material-icon-theme.activeIconPack": "nest"
+}

@@ -1,0 +1,36 @@
+@startuml InactivarUsuario
+title Inactivar_usuario - SIGMA
+left to right direction
+skinparam backgroundColor White
+skinparam usecase {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    ArrowColor Black
+}
+
+actor Administrador
+
+skinparam actor {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    FontColor Black
+}
+
+rectangle "Inactivar_usuario - SIGMA" {
+    usecase "Inactivar_usuario" as AU
+    usecase "Mostrar mensaje de confirmación" as MC
+    usecase "Confirmar la inactivación" as VD
+    usecase "Buscar usuario por identificador" as SU
+    usecase "Validar permisos del usuario" as VP
+    usecase "Identificarse" as ID
+}
+
+Administrador -- AU
+
+AU ..> ID : <<Include>>
+AU ..> VP : <<Include>>
+AU ..> SU : <<Include>>
+AU ..> VD : <<Include>>
+AU ..> MC : <<Include>>
+
+@enduml

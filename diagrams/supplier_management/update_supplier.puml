@@ -1,0 +1,41 @@
+@startuml ActualizarProveedor
+left to right direction
+skinparam backgroundColor White
+skinparam usecase {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    ArrowColor Black
+}
+
+actor Administrador
+
+skinparam actor {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    FontColor Black
+}
+
+rectangle "Actualizar_proveedor - SIGMA" {
+    usecase "Actualizar proveedor\n―――――――――――――\n<b>extension points</b>\nNotificar al proveedor \nsobre los cambios" as AU
+    usecase "Notificar al proveedor sobre los cambios" as NC
+    usecase "Mostrar mensaje de confirmación" as MC
+    usecase "Guardar cambios en la base de datos" as GC
+    usecase "Validar datos ingresados" as DI
+    usecase "Ingresar datos actualizados" as DA
+    usecase "Buscar proveedor" as BP
+    usecase "Validar permisos del usuario" as VP
+    usecase "Identificarse" as ID
+}
+
+Administrador -- AU
+
+AU ..> ID : <<Include>>
+AU ..> VP : <<Include>>
+AU ..> BP : <<Include>>
+AU ..> DA : <<Include>>
+AU ..> DI : <<Include>>
+AU ..> GC : <<Include>>
+AU ..> MC : <<Include>>
+AU <.. NC : <<Extend>>
+
+@enduml

@@ -1,0 +1,38 @@
+@startuml InactivarCliente
+title Inactivar_cliente - SIGMA
+left to right direction
+skinparam backgroundColor White
+skinparam usecase {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    ArrowColor Black
+}
+
+actor Administrador
+
+skinparam actor {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    FontColor Black
+}
+
+rectangle "Inactivar_cliente - SIGMA" {
+    usecase "Inactivar cliente\n―――――――――――――\n<b>extension points</b>\nGenerar registro del proceso o log" as AU
+    usecase "Generar registro del proceso o log" as GR
+    usecase "Inactivar el cliente del sistema" as IC
+    usecase "Solicitar confirmación de inactivación" as SC
+    usecase "Buscar cliente por su ID" as BC
+    usecase "Validar rol" as VR
+    usecase "Identificarse" as ID
+}
+
+Administrador -- AU
+
+AU ..> ID : <<Include>>
+AU ..> VR : <<Include>>
+AU ..> BC : <<Include>>
+AU ..> SC : <<Include>>
+AU ..> IC : <<Include>>
+AU <.. GR : <<Extend>>
+
+@enduml

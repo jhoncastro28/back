@@ -1,0 +1,41 @@
+@startuml RegistrarTransacciones
+left to right direction
+skinparam backgroundColor White
+skinparam usecase {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    ArrowColor Black
+}
+
+actor Administrador
+actor Vendedor
+
+skinparam actor {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    FontColor Black
+}
+
+rectangle "Registrar_transacciones - SIGMA" {
+    usecase "Registrar transacciones\n―――――――――――――\n<b>extension points</b>\nNotificar al administrador" as CU
+    usecase "Notificar al administrador" as NA
+    usecase "Generar registro en base de datos" as GR
+    usecase "Registrar transacción en \nhistorial del sistema" as RT
+    usecase "Ingresar detalles de la transacción" as IT
+    usecase "Seleccionar tipo de transacción" as ST
+    usecase "Validar permisos del usuario" as VP
+    usecase "Identificarse" as ID
+}
+
+Administrador -- CU
+Vendedor -- CU
+
+CU ..> (ID) : <<Include>>
+CU ..> (VP) : <<Include>>
+CU ..> (ST) : <<Include>>
+CU ..> (IT) : <<Include>>
+CU ..> (RT) : <<Include>>
+CU ..> (GR) : <<Include>>
+CU <.. (NA) : <<Extend>>
+
+@enduml

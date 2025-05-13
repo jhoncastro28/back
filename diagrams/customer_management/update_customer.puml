@@ -1,0 +1,38 @@
+@startuml ActualizarCliente
+title Actualizar_cliente - SIGMA
+left to right direction
+skinparam backgroundColor White
+skinparam usecase {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    ArrowColor Black
+}
+
+actor Administrador
+actor Vendedor
+
+skinparam actor {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    FontColor Black
+}
+
+rectangle "Actualizar_cliente - SIGMA" {
+    usecase "Actualizar cliente\n―――――――――――――\n<b>extension points</b>\nNotificar al cliente" as AU
+    usecase "Notificar al cliente" as NC
+    usecase "Guardar cambios" as GC
+    usecase "Ingresar datos actualizados" as SU
+    usecase "Buscar cliente por ID" as VP
+    usecase "Identificarse" as ID
+}
+
+Administrador -- AU
+Vendedor -- AU
+
+AU ..> ID : <<Include>>
+AU ..> VP : <<Include>>
+AU ..> SU : <<Include>>
+AU ..> GC : <<Include>>
+AU <.. NC : <<Extend>>
+
+@enduml

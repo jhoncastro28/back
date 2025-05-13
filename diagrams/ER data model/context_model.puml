@@ -1,0 +1,186 @@
+@startuml "Modelo de Dominio Sistema de Inventario SIGMA (Integrado)"
+
+' --- Entidades Principales ---
+class Person {
+  -id: Integer
+  -name: String
+  -lastName: String
+  -email: String
+  -phoneNumber: String
+  -address: String
+}
+
+class User extends Person {
+  -idUser: Integer
+  -userName: String
+  -password: String <<hashed>>
+  -status: Boolean
+}
+
+abstract class Role <<Role>> {
+  +idRole: Integer
+  +nameRole: String
+  +descriptionPermits: String
+}
+
+' Extensiones de Rol
+class Administrator extends Role
+class Salesperson extends Role
+class CustomerRole extends Role
+class ProviderRole extends Role
+
+' Extensiones de Persona
+class Customer extends Person {
+  -customerType: String
+  -creditLimit: Double
+  -balance: Double
+  -creditDays: Integer
+}
+
+class Provider extends Person {
+  -ruc: String
+  -companyName: String
+  -deliveryTime: Integer
+  -termsPayment: String
+  -rating: Integer
+}
+
+class Order {
+  -idOrder: Integer
+  -orderDate: Date
+  -statusOrder: String {Pendiente, Entregado, Cancelado}
+  -total: Double
+}
+
+class Item {
+  -idItem: Integer
+  -code: String
+  -name: String
+  -description: String
+  -stockMinimum: Integer
+  -stockMaximum: Integer
+  -currentStock: Integer
+}
+
+class Presentation {
+  -idPresentation: Integer
+  -name: String
+  -factor: Double
+  -description: String
+}
+
+class Product {
+  -idProduct: Integer
+  -name: String
+  -description: String
+  -price: Double
+}
+
+class Category {
+  -idCategory: Integer
+  -name: String
+  -description: String
+}
+
+class Sale {
+  -idSale: Integer
+  -date: Date
+  -grossTotal: Double
+  -total: Double
+  -invoiceStatus: Boolean
+}
+
+class Detail {
+  -idDetail: Integer
+  -quantity: Integer
+  -unitPrice: Double
+  -subtotal: Double
+}
+
+' --- Relaciones y Cardinalidades ---
+
+' Usuario, Persona y Rol
+User "1" -- "1..*" Role : tiene >
+Person "1" -- "0..*" Role : puede tener >
+Customer "1" -- "1" CustomerRole : tiene asignado >
+Provider "1" -- "1" ProviderRole : tiene asignado >
+
+' Proveedor y pedido
+Provider "1" -- "0..*" Order : provee >
+Order "1" *-- "1..*" Item : contiene >
+
+' Categoría, producto, presentación e item
+Category "1" -- "0..*" Product : clasifica >
+Product "1" -- "0..*" Presentation : tiene >
+Presentation "1" -- "0..*" Item : define >
+
+' Venta y detalle
+Item "1" -- "0..*" Detail : se incluye en >
+Detail "1..*" *-- "1" Sale : forma parte de >
+Sale "0..*" -- "1" User : registrada por > (Vendedor)
+Sale "0..*" -- "1" Customer : realizada por >
+
+' --- Restricciones y Permisos ---
+note top of Administrator
+  **Permisos Administrador:**
+  - Gestión de Proveedores (CRUD)
+  - Gestión de Productos (CRUD)
+  - Gestión completa de Inventario
+  - Gestión de Pedidos
+  - Gestión de Usuarios
+  - Acceso a todos los reportes
+end note
+
+note top of Salesperson
+  **Permisos Vendedor:**
+  - Registrar Ventas (Crear, Actualizar)
+  - Consultar Inventario
+  - Actualizar Inventario (asociado a ventas)
+  - Emitir Facturas/Recibos
+  - Gestión de Clientes (CRUD)
+end note
+
+note top of CustomerRole
+  **Rol Cliente:**
+  - Consultar historial de compras
+  - Ver catálogo de productos
+  - Realizar pedidos (opcional)
+end note
+
+note top of ProviderRole
+  **Rol Proveedor:**
+  - Gestionar catálogo propio
+  - Ver historial de pedidos
+  - Recibir notificaciones
+end note
+
+note bottom of Customer
+  **Cliente:**
+  - Realiza compras y recibe facturas
+  - Se registra información de contacto
+end note
+
+note bottom of Provider
+  **Proveedor:**
+  - Suministra productos al inventario
+  - Recibe pedidos del sistema
+end note
+
+note right of Order
+  Un pedido se realiza a un proveedor
+  y contiene múltiples items
+end note
+
+note right of Detail
+  El detalle conecta items específicos
+  con una venta y registra cantidad,
+  precio unitario y subtotal
+end note
+
+note bottom of Item
+  El Item representa la unidad individual
+  de inventario que puede ser vendida o
+  incluida en un pedido
+end note
+
+@enduml

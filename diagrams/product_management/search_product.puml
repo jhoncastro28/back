@@ -1,0 +1,35 @@
+@startuml BuscarProducto
+left to right direction
+skinparam backgroundColor White
+skinparam usecase {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    ArrowColor Black
+}
+
+actor Administrador
+actor Vendedor
+
+skinparam actor {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    FontColor Black
+}
+
+rectangle "Buscar_producto - SIGMA" {
+    usecase "Buscar producto" as AU
+    usecase "Mostrar detalles del producto" as MD
+    usecase "Mensaje de confirmación" as MC
+    usecase "Ingresar datos del producto" as IP
+    usecase "Identificar usuario" as ID
+}
+
+Administrador -- AU
+Vendedor -- AU
+
+AU ..> ID: <<Include>>
+AU ..> IP: <<Include>>
+AU ..> MC: <<Include>>
+AU ..> MD: <<Include>>
+
+@enduml

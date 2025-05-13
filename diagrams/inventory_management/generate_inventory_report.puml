@@ -1,0 +1,37 @@
+@startuml GenerarReporteInventario
+left to right direction
+skinparam backgroundColor White
+skinparam usecase {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    ArrowColor Black
+}
+
+actor Administrador
+
+skinparam actor {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    FontColor Black
+}
+
+rectangle "Generar_reporte_inventario - SIGMA" {
+    usecase "Generar reporte de inventario\n―――――――――――――\n<b>extension points</b>\nEnviar reporte por correo\n al usuario" as CU
+    usecase "Enviar reporte por correo al usuario" as ER
+    usecase "Mostrar el reporte generado\n al usuario" as MR
+    usecase "Generar reporte en formato \nseleccionado" as GR
+    usecase "Cargar datos de inventario" as CD
+    usecase "Seleccionar tipo de reporte" as SR
+    usecase "Identificarse" as ID
+}
+
+Administrador -- CU
+
+CU ..> (ID) : <<Include>>
+CU ..> (SR) : <<Include>>
+CU ..> (CD) : <<Include>>
+CU ..> (GR) : <<Include>>
+CU ..> (MR) : <<Include>>
+CU <.. (ER) : <<Extend>>
+
+@enduml

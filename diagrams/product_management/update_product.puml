@@ -1,0 +1,35 @@
+@startuml ActualizarProducto
+left to right direction
+skinparam backgroundColor White
+skinparam usecase {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    ArrowColor Black
+}
+
+actor Administrador
+actor Vendedor
+
+skinparam actor {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    FontColor Black
+}
+
+rectangle "Actualizar_producto - SIGMA" {
+    usecase "Actualizar producto" as AU
+    usecase "Confirmar cambios" as CC
+    usecase "Ingresar nuevo datos del producto" as IN
+    usecase "Modificar producto" as MP
+    usecase "Identificar usuario" as ID
+}
+
+Administrador -- AU
+Vendedor -- AU
+
+AU ..> ID: <<Include>>
+AU ..> MP: <<Include>>
+AU ..> IN: <<Include>>
+AU ..> CC: <<Include>>
+
+@enduml

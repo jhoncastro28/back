@@ -1,0 +1,37 @@
+@startuml CompararVentasInventario
+left to right direction
+skinparam backgroundColor White
+skinparam usecase {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    ArrowColor Black
+}
+
+actor Administrador
+
+skinparam actor {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    FontColor Black
+}
+
+rectangle "Comparar_ventas_inventario - SIGMA" {
+    usecase "Comparar ventas e inventario\n―――――――――――――\n<b>extension points</b>\nExportar informe comparativo" as CU
+    usecase "Exportar informe comparativo" as GR
+    usecase "Mostrar resumen de discrepancias" as MR
+    usecase "Validar consistencia de los datos cargados" as VC
+    usecase "Cargar datos de ventas y movimientos" as CD
+    usecase "Seleccionar período para comparar" as SP
+    usecase "Identificarse" as ID
+}
+
+Administrador -- CU
+
+CU ..> (ID) : <<Include>>
+CU ..> (SP) : <<Include>>
+CU ..> (CD) : <<Include>>
+CU ..> (VC) : <<Include>>
+CU ..> (MR) : <<Include>>
+CU <.. (GR) : <<Extend>>
+
+@enduml

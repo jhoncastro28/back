@@ -1,0 +1,38 @@
+@startuml ActualizarUsuario
+title Actualizar_usuario - SIGMA
+left to right direction
+skinparam backgroundColor White
+skinparam usecase {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    ArrowColor Black
+}
+
+actor Administrador
+
+skinparam actor {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    FontColor Black
+}
+
+rectangle "Actualizar_usuario - SIGMA" {
+    usecase "Actualizar_usuario" as AU
+    usecase "Mostrar mensaje de confirmación" as MC
+    usecase "Guardar cambios en la base de datos" as GC
+    usecase "Validar datos ingresados" as VD
+    usecase "Seleccionar usuario a actualizar" as SU
+    usecase "Validar permisos del usuario" as VP
+    usecase "Identificarse" as ID
+}
+
+Administrador -- AU
+
+AU ..> ID : <<Include>>
+AU ..> VP : <<Include>>
+AU ..> SU : <<Include>>
+AU ..> VD : <<Include>>
+AU ..> GC : <<Include>>
+AU ..> MC : <<Include>>
+
+@enduml

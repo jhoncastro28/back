@@ -1,0 +1,46 @@
+@startuml GestionInventario
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle stick
+
+skinparam usecase {
+    BackgroundColor #B3D9FF
+    BorderColor #3399FF
+    FontColor Black
+}
+
+skinparam actor {
+    BackgroundColor #FFD699
+    BorderColor Black
+    FontColor Black
+}
+
+actor Administrador #B3D9FF
+actor Vendedor #B3D9FF
+
+package "Gestión de inventario – SIGMA" {
+    usecase "Actualizar inventario" as AI
+    usecase "Registrar transacciones" as RT
+    usecase "Buscar categorías productos" as BC
+    usecase "Comparar ventas inventario" as CV
+    usecase "Generar reporte inventario" as GR
+    usecase "Configurar alertas" as CA
+    
+}
+
+
+Administrador -- CA
+Administrador -- GR
+Administrador -- CV
+Administrador -- BC
+Administrador -- RT
+Administrador -- AI
+
+
+AI -- Vendedor
+BC -- Vendedor
+RT -- Vendedor
+
+
+@enduml

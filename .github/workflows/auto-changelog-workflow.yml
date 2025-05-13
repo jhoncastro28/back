@@ -1,0 +1,81 @@
+name: Generate Changelog
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate-changelog:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch all tags
+        run: git fetch --tags --force
+
+      - name: Get Latest Tag
+        id: latest-tag
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0)
+          echo "Latest tag found: $LATEST_TAG"
+          echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
+
+      - name: Set up git-cliff
+        run: |
+          curl -L https://github.com/orhun/git-cliff/releases/download/v1.3.1/git-cliff-1.3.1-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          mv git-cliff-1.3.1/git-cliff /usr/local/bin/
+          chmod +x /usr/local/bin/git-cliff
+
+      - name: Generate CHANGELOG.md
+        run: |
+          echo "Generating changelog with git-cliff..."
+          git-cliff --config cliff.toml --output CHANGELOG.md
+          echo "Content of generated CHANGELOG.md:"
+          cat CHANGELOG.md
+
+      - name: Check for changes
+        id: check-changes
+        run: |
+          git status CHANGELOG.md
+          if [[ -n "$(git status --porcelain CHANGELOG.md)" ]]; then
+            echo "Cambios detectados en CHANGELOG.md"
+            echo "HAS_CHANGES=true" >> $GITHUB_OUTPUT
+          else
+            echo "No se detectaron cambios en CHANGELOG.md"
+            echo "HAS_CHANGES=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        id: create-pull-request
+        if: steps.check-changes.outputs.HAS_CHANGES == 'true'
+        uses: peter-evans/create-pull-request@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'docs: Actualizar CHANGELOG.md para versión ${{ github.event.repository.default_branch }}'
+          title: '📚 Actualización de Changelog'
+          body: |
+            Actualización automática del archivo CHANGELOG.md
+            - Generado con git-cliff
+          branch: update-changelog-${{ github.run_id }}
+          base: main
+          delete-branch: true
+          labels: documentation,automated
+
+      - name: Comment on PR
+        if: steps.check-changes.outputs.HAS_CHANGES == 'true' && steps.create-pull-request.outputs.pull-request-number != ''
+        run: |
+          PR_NUMBER="${{ steps.create-pull-request.outputs.pull-request-number }}"
+          echo "PR #$PR_NUMBER creado correctamente. Por favor, revisa y haz merge manualmente."
+          gh pr comment "$PR_NUMBER" --body "✅ Changelog actualizado automáticamente. Por favor, revisa los cambios y haz merge cuando estés listo."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

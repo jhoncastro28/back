@@ -1,0 +1,36 @@
+@startuml BuscarProveedor
+left to right direction
+skinparam backgroundColor White
+skinparam usecase {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    ArrowColor Black
+}
+
+actor Administrador
+
+skinparam actor {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    FontColor Black
+}
+
+rectangle "Buscar_proveedor - SIGMA" {
+    usecase "Buscar proveedor\n―――――――――――――\n<b>extension points</b>\nExportar resultados \nde búsqueda" as AU
+    usecase "Exportar resultados de búsqueda" as ER
+    usecase "Mostrar resultados" as MR
+    usecase "Procesar búsqueda" as PB
+    usecase "Ingresar parámetros de búsqueda" as IP
+    usecase "Validar permisos del usario" as VP
+    usecase "Identificarse" as ID
+}
+
+Administrador -- AU
+
+AU ..> ID : <<Include>>
+AU ..> VP : <<Include>>
+AU ..> IP : <<Include>>
+AU ..> PB : <<Include>>
+AU ..> MR : <<Include>>
+AU <.. ER : <<Extend>>
+@enduml

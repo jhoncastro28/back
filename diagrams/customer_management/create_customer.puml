@@ -1,0 +1,36 @@
+@startuml CrearCliente
+title Crear_cliente - SIGMA
+left to right direction
+skinparam backgroundColor White
+skinparam usecase {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    ArrowColor Black
+}
+
+actor Administrador
+actor Vendedor
+
+skinparam actor {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    FontColor Black
+}
+
+rectangle "Crear_cliente - SIGMA" {
+    usecase "Crear cliente\n―――――――――――――\n<b>extension points</b>\nEnviar notificación al cliente" as CU
+    usecase "Enviar notificación al sistema" as GU
+    usecase "Registrar cliente en sistema" as VF
+    usecase "Ingresar información cliente" as VR
+    usecase "Identificarse" as ID
+    
+}
+
+Administrador -- CU
+Vendedor -- CU
+
+CU ..> (ID) : <<Include>>
+CU ..> (VR) : <<Include>>
+CU ..> (VF) : <<Include>>
+CU <.. (GU) : <<Extend>>
+@enduml

@@ -1,0 +1,39 @@
+@startuml BuscarCliente
+title Buscar_cliente - SIGMA
+left to right direction
+skinparam backgroundColor White
+skinparam usecase {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    ArrowColor Black
+}
+
+actor Administrador
+actor Vendedor
+
+skinparam actor {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    FontColor Black
+}
+
+rectangle "Buscar_cliente - SIGMA" {
+    usecase "Buscar cliente\n―――――――――――――\n<b>extension points</b>\nExportar resultados a archivo\nFiltrar información adicional" as AU
+    usecase "Filtrar información adicional" as FI
+    usecase "Exportar resultados a archivo" as ER
+    usecase "Mostrar resultado de búsqueda" as MB
+    usecase "Realiar búsqueda en sistema" as BS
+    usecase "Ingresar criterio de búsqueda" as IB
+    usecase "Identificarse" as ID
+}
+
+Administrador -- AU
+Vendedor -- AU
+
+AU ..> ID : <<Include>>
+AU ..> IB : <<Include>>
+AU ..> BS : <<Include>>
+AU ..> MB : <<Include>>
+AU <.. ER : <<Extend>>
+AU <.. FI : <<Extend>>
+@enduml

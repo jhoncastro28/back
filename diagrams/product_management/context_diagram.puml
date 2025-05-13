@@ -1,0 +1,40 @@
+@startuml GestionProductos
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle stick
+
+skinparam usecase {
+    BackgroundColor #B3D9FF
+    BorderColor #3399FF
+    FontColor Black
+}
+
+skinparam actor {
+    BackgroundColor #FFD699
+    BorderColor Black
+    FontColor Black
+}
+
+actor Administrador #B3D9FF
+actor Vendedor #B3D9FF
+
+package "Gestión de productos – SIGMA" {
+    usecase "Crear_producto" as CU
+    usecase "Actualizar_producto" as AU
+    usecase "Inactivar_producto" as EU
+    usecase "Buscar_producto" as BU
+}
+
+Administrador -- CU
+Administrador -- AU
+Administrador -- EU
+Administrador -- BU
+
+Vendedor -- CU
+Vendedor -- AU
+Vendedor -- EU
+Vendedor -- BU
+
+
+@enduml

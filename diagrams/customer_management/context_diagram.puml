@@ -1,0 +1,40 @@
+@startuml GestionClientes
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle stick
+
+skinparam usecase {
+    BackgroundColor #B3D9FF
+    BorderColor #3399FF
+    FontColor Black
+}
+
+skinparam actor {
+    BackgroundColor #FFD699
+    BorderColor Black
+    FontColor Black
+}
+
+actor Vendedor #B3D9FF
+actor Administrador #B3D9FF
+
+
+package "Gestión de clientes – SIGMA" {
+    usecase "Crear_cliente" as CU
+    usecase "Actualizar_cliente" as AU
+    usecase "Buscar_cliente" as BU
+    usecase "Inactivar_cliente" as EU
+   
+}
+
+Administrador -- CU
+Administrador -- AU
+Administrador -- EU
+Administrador -- BU
+
+Vendedor -- CU
+Vendedor -- AU
+Vendedor -- BU
+
+@enduml

@@ -1,0 +1,35 @@
+@startuml InactivarProducto
+left to right direction
+skinparam backgroundColor White
+skinparam usecase {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    ArrowColor Black
+}
+
+actor Administrador
+actor Vendedor
+
+skinparam actor {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    FontColor Black
+}
+
+rectangle "Inactivar_producto - SIGMA" {
+    usecase "Inactivar producto" as AU
+    usecase "Mensaje de confirmación" as MC
+    usecase "Inactivar producto seleccionado" as EP
+    usecase "Buscar producto" as BP
+    usecase "Identificar usuario" as ID
+}
+
+Administrador -- AU
+Vendedor -- AU
+
+AU ..> ID: <<Include>>
+AU ..> BP: <<Include>>
+AU ..> EP: <<Include>>
+AU ..> MC: <<Include>>
+
+@enduml

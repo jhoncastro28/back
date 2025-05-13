@@ -1,0 +1,37 @@
+@startuml ConfigurarAlertas
+left to right direction
+skinparam backgroundColor White
+skinparam usecase {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    ArrowColor Black
+}
+
+actor Administrador
+
+skinparam actor {
+    BackgroundColor #ADD8E6
+    BorderColor Black
+    FontColor Black
+}
+
+rectangle "Configurar_alertas - SIGMA" {
+    usecase "Configurar alertas\n―――――――――――――\n<b>extension points</b>\nEnviar notificación a usuarios\n al activar alerta" as CU
+    usecase "Enviar notificación a usuarios \nal activar alerta" as EN
+    usecase "Configurar criterios de alerta" as CC
+    usecase "Guardar configuración de alertas" as GC
+    usecase "Definir niveles mínimos y \nmáximo de stock" as DN
+    usecase "Validar permisos del usuario" as VP
+    usecase "Identificarse" as ID
+}
+
+Administrador -- CU
+
+CU ..> (ID) : <<Include>>
+CU ..> (VP) : <<Include>>
+CU ..> (DN) : <<Include>>
+CU ..> (GC) : <<Include>>
+CU ..> (CC) : <<Include>>
+CU <.. (EN) : <<Extend>>
+
+@enduml
