@@ -23,6 +23,7 @@ import {
 import { Roles } from '../auth/decorators';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards';
 import { Role } from '../auth/interfaces';
+import { ToggleActiveService } from '../common/services/toggle-active.service';
 import { ClientsService } from './clients.service';
 import { CreateClientDto, FilterClientDto, UpdateClientDto } from './dto';
 import { ClientResponse, PaginatedClientsResponse } from './entities';
@@ -37,7 +38,10 @@ import { ClientResponse, PaginatedClientsResponse } from './entities';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class ClientsController {
-  constructor(private readonly clientsService: ClientsService) {}
+  constructor(
+    private readonly clientsService: ClientsService,
+    private readonly toggleActiveService: ToggleActiveService,
+  ) {}
 
   /**
    * Create a new client
@@ -323,6 +327,40 @@ export class ClientsController {
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   deactivate(@Param('id', ParseIntPipe) id: number) {
-    return this.clientsService.toggleActive(id, { isActive: false });
+    return this.toggleActiveService.toggleActive('client', id, {
+      isActive: false,
+    });
+  }
+
+  /**
+   * Activate a client
+   * Restricted to administrators
+   */
+  @ApiOperation({ summary: 'Activate client' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Client successfully activated',
+    type: ClientResponse,
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Client not found',
+  })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'Forbidden - Administrators only',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Invalid ID format',
+  })
+  @ApiParam({ name: 'id', description: 'Client ID', example: 1 })
+  @Roles(Role.ADMINISTRATOR)
+  @Patch(':id/activate')
+  @HttpCode(HttpStatus.OK)
+  activate(@Param('id', ParseIntPipe) id: number) {
+    return this.toggleActiveService.toggleActive('client', id, {
+      isActive: true,
+    });
   }
 }

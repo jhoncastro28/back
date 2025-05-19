@@ -9,6 +9,9 @@ import { DiscountsModule } from './discounts/discounts.module';
 import { InventoryMovementsModule } from './inventory-movements/inventory-movements.module';
 import { PricesModule } from './prices/prices.module';
 import { ProductsModule } from './products/products.module';
+import { InventoryReportsModule } from './inventory-reports/inventory-reports.module';
+import { SalesModule } from './sales/sales.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
 
 @Module({
   imports: [
@@ -19,6 +22,9 @@ import { ProductsModule } from './products/products.module';
     PricesModule,
     DiscountsModule,
     InventoryMovementsModule,
+    InventoryReportsModule,
+    SalesModule,
+    SuppliersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

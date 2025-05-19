@@ -3,17 +3,29 @@ name: NestJS Backend Tests
 on:
   push:
     branches: [main, release, develop]
+    paths:
+      - 'src/**'
+      - 'test/**'
+      - 'package*.json'
+      - '.github/workflows/**'
   pull_request:
     branches: [main, release, develop]
+    paths:
+      - 'src/**'
+      - 'test/**'
+      - 'package*.json'
+      - '.github/workflows/**'
 
 jobs:
   test:
     name: Test NestJS Backend
     runs-on: ubuntu-latest
+    timeout-minutes: 15 # Set a reasonable timeout for the entire job
 
     strategy:
       matrix:
         node-version: [22.x]
+      fail-fast: true # Stop all jobs if one fails
 
     steps:
       - name: Checkout repository
@@ -25,18 +37,33 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
 
+      - name: Cache node modules
+        uses: actions/cache@v3
+        id: cache-npm
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
       - name: Install dependencies
-        run: npm ci
+        if: steps.cache-npm.outputs.cache-hit != 'true'
+        run: npm ci --no-audit --prefer-offline
+        timeout-minutes: 5
 
       - name: Lint code
         run: npm run lint
-        continue-on-error: true
+        timeout-minutes: 2
 
       - name: Build application
         run: npm run build
+        timeout-minutes: 3
 
       - name: Run unit tests
-        run: npm run test
+        run: npm run test -- --maxWorkers=2 --bail --detectOpenHandles --forceExit
+        timeout-minutes: 5
 
       - name: Generate test coverage
+        if: github.event_name == 'pull_request' # Only on PRs, not on every push
         run: npm run test:cov
+        timeout-minutes: 3

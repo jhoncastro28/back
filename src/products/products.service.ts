@@ -223,6 +223,27 @@ export class ProductsService {
   }
 
   /**
+   * Activates a previously deactivated product
+   * This makes the product available again in active product listings
+   */
+  async activate(id: number): Promise<void> {
+    // Check if the product exists
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+    });
+
+    if (!product) {
+      throw new NotFoundException(`Product with ID ${id} not found`);
+    }
+
+    // Mark as active
+    await this.prisma.product.update({
+      where: { id },
+      data: { isActive: true },
+    });
+  }
+
+  /**
    * Get products with stock levels below their minimum quantity
    */
   async getLowStockProducts() {

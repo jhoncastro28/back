@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ToggleActiveService } from '../common/services/toggle-active.service';
 import { CreateProductDto, FilterProductDto, UpdateProductDto } from './dto';
 import { StockAdjustmentType } from './dto/adjust-stock.dto';
 import { ProductsController } from './products.controller';
@@ -7,13 +8,13 @@ import { ProductsService } from './products.service';
 describe('ProductsController', () => {
   let controller: ProductsController;
   let service: ProductsService;
+  let toggleActiveService: ToggleActiveService;
 
   const mockProductsService = {
     create: jest.fn(),
     findAll: jest.fn(),
     findOne: jest.fn(),
     update: jest.fn(),
-    deactivate: jest.fn(),
     getLowStockProducts: jest.fn(),
     getPriceHistory: jest.fn(),
     adjustStock: jest.fn(),
@@ -22,7 +23,12 @@ describe('ProductsController', () => {
     generatePriceChangesReport: jest.fn(),
   };
 
+  const mockToggleActiveService = {
+    toggleActive: jest.fn(),
+  };
+
   beforeEach(async () => {
+    jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ProductsController],
       providers: [
@@ -30,11 +36,16 @@ describe('ProductsController', () => {
           provide: ProductsService,
           useValue: mockProductsService,
         },
+        {
+          provide: ToggleActiveService,
+          useValue: mockToggleActiveService,
+        },
       ],
     }).compile();
 
     controller = module.get<ProductsController>(ProductsController);
     service = module.get<ProductsService>(ProductsService);
+    toggleActiveService = module.get<ToggleActiveService>(ToggleActiveService);
   });
 
   it('should be defined', () => {
@@ -174,16 +185,55 @@ describe('ProductsController', () => {
     it('should deactivate a product', async () => {
       // Arrange
       const productId = 1;
+      const expectedResult = {
+        message: 'product deactivated successfully',
+        data: {
+          id: productId,
+          isActive: false,
+        },
+      };
 
-      mockProductsService.deactivate.mockResolvedValue(undefined);
+      mockToggleActiveService.toggleActive.mockResolvedValue(expectedResult);
 
       // Act
       const result = await controller.deactivate(productId);
 
       // Assert
-      expect(result).toBeUndefined();
-      expect(service.deactivate).toHaveBeenCalledWith(productId);
-      expect(service.deactivate).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(expectedResult);
+      expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
+        'product',
+        productId,
+        { isActive: false },
+      );
+      expect(toggleActiveService.toggleActive).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('activate', () => {
+    it('should activate a product', async () => {
+      // Arrange
+      const productId = 1;
+      const expectedResult = {
+        message: 'product activated successfully',
+        data: {
+          id: productId,
+          isActive: true,
+        },
+      };
+
+      mockToggleActiveService.toggleActive.mockResolvedValue(expectedResult);
+
+      // Act
+      const result = await controller.activate(productId);
+
+      // Assert
+      expect(result).toEqual(expectedResult);
+      expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
+        'product',
+        productId,
+        { isActive: true },
+      );
+      expect(toggleActiveService.toggleActive).toHaveBeenCalledTimes(1);
     });
   });
 

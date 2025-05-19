@@ -6,6 +6,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PaginationDto } from '../common/dto';
+import '../config/test.envs';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
 import { LoginAuthDto } from './dto/login-auth.dto';
@@ -19,9 +20,9 @@ jest.mock('bcrypt', () => ({
 }));
 
 describe('AuthService', () => {
+  let module: TestingModule;
   let service: AuthService;
   let prismaService: PrismaService;
-  // Declaramos jwtService para poder usarlo en las pruebas
   let jwtService: JwtService;
 
   // Mock user data with 'any' type to avoid type conflicts in tests
@@ -68,7 +69,8 @@ describe('AuthService', () => {
   };
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    jest.clearAllMocks();
+    module = await Test.createTestingModule({
       providers: [
         AuthService,
         {
@@ -97,6 +99,14 @@ describe('AuthService', () => {
     jwtService = module.get<JwtService>(JwtService);
   });
 
+  afterEach(async () => {
+    jest.clearAllMocks();
+  });
+
+  afterAll(async () => {
+    await module.close();
+  });
+
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
@@ -119,9 +129,9 @@ describe('AuthService', () => {
           email: mockUser.email,
           role: mockUser.role,
         },
-        {
-          expiresIn: 86400,
-        },
+        expect.objectContaining({
+          expiresIn: '1d',
+        }),
       );
       expect(result).toEqual({
         message: 'User registered successfully',
@@ -161,9 +171,9 @@ describe('AuthService', () => {
           email: mockUser.email,
           role: mockUser.role,
         },
-        {
-          expiresIn: 86400,
-        },
+        expect.objectContaining({
+          expiresIn: '1d',
+        }),
       );
       expect(result).toEqual({
         message: 'Login successful',

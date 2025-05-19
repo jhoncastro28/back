@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ToggleActiveService } from '../common/services/toggle-active.service';
 import { DiscountsController } from './discounts.controller';
 import { DiscountsService } from './discounts.service';
 import {
@@ -11,14 +12,18 @@ import {
 describe('DiscountsController', () => {
   let controller: DiscountsController;
   let service: DiscountsService;
+  let toggleActiveService: ToggleActiveService;
 
   const mockDiscountsService = {
     create: jest.fn(),
     findAll: jest.fn(),
     findOne: jest.fn(),
     update: jest.fn(),
-    remove: jest.fn(),
     getCurrentDiscounts: jest.fn(),
+  };
+
+  const mockToggleActiveService = {
+    toggleActive: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -29,11 +34,16 @@ describe('DiscountsController', () => {
           provide: DiscountsService,
           useValue: mockDiscountsService,
         },
+        {
+          provide: ToggleActiveService,
+          useValue: mockToggleActiveService,
+        },
       ],
     }).compile();
 
     controller = module.get<DiscountsController>(DiscountsController);
     service = module.get<DiscountsService>(DiscountsService);
+    toggleActiveService = module.get<ToggleActiveService>(ToggleActiveService);
   });
 
   it('should be defined', () => {
@@ -205,20 +215,51 @@ describe('DiscountsController', () => {
     });
   });
 
-  describe('remove', () => {
-    it('should remove a discount', async () => {
-      // Arrange
+  describe('deactivate', () => {
+    it('should deactivate a discount', async () => {
       const discountId = 1;
+      const expectedResult = {
+        message: 'discount deactivated successfully',
+        data: {
+          id: discountId,
+          isActive: false,
+        },
+      };
 
-      mockDiscountsService.remove.mockResolvedValue(undefined);
+      mockToggleActiveService.toggleActive.mockResolvedValue(expectedResult);
 
-      // Act
-      const result = await controller.remove(discountId);
+      const result = await controller.deactivate(discountId);
 
-      // Assert
-      expect(result).toBeUndefined();
-      expect(service.remove).toHaveBeenCalledWith(discountId);
-      expect(service.remove).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(expectedResult);
+      expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
+        'discount',
+        discountId,
+        { isActive: false },
+      );
+    });
+  });
+
+  describe('activate', () => {
+    it('should activate a discount', async () => {
+      const discountId = 1;
+      const expectedResult = {
+        message: 'discount activated successfully',
+        data: {
+          id: discountId,
+          isActive: true,
+        },
+      };
+
+      mockToggleActiveService.toggleActive.mockResolvedValue(expectedResult);
+
+      const result = await controller.activate(discountId);
+
+      expect(result).toEqual(expectedResult);
+      expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
+        'discount',
+        discountId,
+        { isActive: true },
+      );
     });
   });
 });

@@ -1,5 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PaginationDto } from '../common/dto';
+import { ToggleActiveService } from '../common/services/toggle-active.service';
+import '../config/test.envs';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import {
@@ -10,8 +12,10 @@ import {
 } from './dto';
 
 describe('AuthController', () => {
+  let module: TestingModule;
   let controller: AuthController;
   let authService: AuthService;
+  let toggleActiveService: ToggleActiveService;
 
   // Mock responses
   const mockAuthResponse = {
@@ -112,7 +116,8 @@ describe('AuthController', () => {
   };
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    jest.clearAllMocks();
+    module = await Test.createTestingModule({
       controllers: [AuthController],
       providers: [
         {
@@ -129,11 +134,28 @@ describe('AuthController', () => {
               .mockResolvedValue(mockDeactivatedUserResponse),
           },
         },
+        {
+          provide: ToggleActiveService,
+          useValue: {
+            toggleActive: jest
+              .fn()
+              .mockResolvedValue(mockDeactivatedUserResponse),
+          },
+        },
       ],
     }).compile();
 
     controller = module.get<AuthController>(AuthController);
     authService = module.get<AuthService>(AuthService);
+    toggleActiveService = module.get<ToggleActiveService>(ToggleActiveService);
+  });
+
+  afterEach(async () => {
+    jest.clearAllMocks();
+  });
+
+  afterAll(async () => {
+    await module.close();
   });
 
   it('should be defined', () => {
@@ -198,7 +220,8 @@ describe('AuthController', () => {
   describe('toggleUserActive', () => {
     it('should activate/deactivate a user', async () => {
       const result = await controller.deactivateUser('user-id-1');
-      expect(authService.toggleUserActive).toHaveBeenCalledWith(
+      expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
+        'user',
         'user-id-1',
         mockToggleActiveDto,
       );

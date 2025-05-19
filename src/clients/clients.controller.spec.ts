@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ToggleActiveService } from '../common/services/toggle-active.service';
 import { ClientsController } from './clients.controller';
 import { ClientsService } from './clients.service';
 import { CreateClientDto, FilterClientDto, UpdateClientDto } from './dto';
@@ -6,6 +7,7 @@ import { CreateClientDto, FilterClientDto, UpdateClientDto } from './dto';
 describe('ClientsController', () => {
   let controller: ClientsController;
   let clientsService: ClientsService;
+  let toggleActiveService: ToggleActiveService;
 
   // Mock responses
   const mockClientResponse = {
@@ -181,6 +183,10 @@ describe('ClientsController', () => {
     hasPurchased: true,
   };
 
+  const mockToggleActiveService = {
+    toggleActive: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ClientsController],
@@ -192,9 +198,6 @@ describe('ClientsController', () => {
             findAll: jest.fn().mockResolvedValue(mockPaginatedClients),
             findOne: jest.fn().mockResolvedValue(mockClientResponse),
             update: jest.fn().mockResolvedValue(mockClientResponse),
-            toggleActive: jest
-              .fn()
-              .mockResolvedValue(mockDeactivatedClientResponse),
             getPurchaseHistory: jest
               .fn()
               .mockResolvedValue(mockPurchaseHistoryResponse),
@@ -203,11 +206,16 @@ describe('ClientsController', () => {
               .mockResolvedValue(mockPurchaseReportResponse),
           },
         },
+        {
+          provide: ToggleActiveService,
+          useValue: mockToggleActiveService,
+        },
       ],
     }).compile();
 
     controller = module.get<ClientsController>(ClientsController);
     clientsService = module.get<ClientsService>(ClientsService);
+    toggleActiveService = module.get<ToggleActiveService>(ToggleActiveService);
   });
 
   it('should be defined', () => {
@@ -251,11 +259,40 @@ describe('ClientsController', () => {
 
   describe('deactivate', () => {
     it('should deactivate a client', async () => {
+      mockToggleActiveService.toggleActive.mockResolvedValue(
+        mockDeactivatedClientResponse,
+      );
       const result = await controller.deactivate(1);
-      expect(clientsService.toggleActive).toHaveBeenCalledWith(1, {
-        isActive: false,
-      });
+      expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
+        'client',
+        1,
+        { isActive: false },
+      );
       expect(result).toEqual(mockDeactivatedClientResponse);
+    });
+  });
+
+  describe('activate', () => {
+    it('should activate a client', async () => {
+      const clientId = 1;
+      const expectedResult = {
+        message: 'client activated successfully',
+        data: {
+          id: clientId,
+          isActive: true,
+        },
+      };
+
+      mockToggleActiveService.toggleActive.mockResolvedValue(expectedResult);
+
+      const result = await controller.activate(clientId);
+
+      expect(result).toEqual(expectedResult);
+      expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
+        'client',
+        clientId,
+        { isActive: true },
+      );
     });
   });
 

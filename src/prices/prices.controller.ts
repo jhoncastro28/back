@@ -20,6 +20,7 @@ import {
 import { Roles } from '../auth/decorators';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards';
 import { Role } from '../auth/interfaces';
+import { ToggleActiveService } from '../common/services/toggle-active.service';
 import { CreatePriceDto, FilterPriceDto, UpdatePriceDto } from './dto';
 import { PricesService } from './prices.service';
 
@@ -27,7 +28,10 @@ import { PricesService } from './prices.service';
 @Controller('prices')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PricesController {
-  constructor(private readonly pricesService: PricesService) {}
+  constructor(
+    private readonly pricesService: PricesService,
+    private readonly toggleActiveService: ToggleActiveService,
+  ) {}
 
   @Post()
   @Roles(Role.ADMINISTRATOR)
@@ -126,16 +130,31 @@ export class PricesController {
 
   @Delete(':id')
   @Roles(Role.ADMINISTRATOR)
-  @ApiOperation({ summary: 'Delete a price' })
-  @ApiResponse({ status: 200, description: 'Price successfully deleted' })
+  @ApiOperation({ summary: 'Deactivate a price (logical deletion)' })
+  @ApiResponse({ status: 200, description: 'Price successfully deactivated' })
   @ApiResponse({
     status: 400,
-    description: 'Cannot delete the current price',
+    description: 'Cannot deactivate the current price',
   })
   @ApiResponse({ status: 404, description: 'Price not found' })
   @ApiResponse({ status: 403, description: 'Forbidden - Administrators only' })
   @ApiParam({ name: 'id', description: 'Price ID', example: 1 })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.pricesService.remove(id);
+  deactivate(@Param('id', ParseIntPipe) id: number) {
+    return this.toggleActiveService.toggleActive('price', id, {
+      isActive: false,
+    });
+  }
+
+  @Patch(':id/activate')
+  @Roles(Role.ADMINISTRATOR)
+  @ApiOperation({ summary: 'Activate a price' })
+  @ApiResponse({ status: 200, description: 'Price successfully activated' })
+  @ApiResponse({ status: 404, description: 'Price not found' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Administrators only' })
+  @ApiParam({ name: 'id', description: 'Price ID', example: 1 })
+  activate(@Param('id', ParseIntPipe) id: number) {
+    return this.toggleActiveService.toggleActive('price', id, {
+      isActive: true,
+    });
   }
 }

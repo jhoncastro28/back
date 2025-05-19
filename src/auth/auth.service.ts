@@ -8,6 +8,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PaginatedResult } from '../common/interfaces';
+import { envs } from '../config/envs';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateAuthDto,
@@ -20,15 +21,7 @@ import { Role } from './interfaces';
 
 @Injectable()
 export class AuthService {
-  // Token expiration times in seconds
-  private readonly TOKEN_EXPIRATION = {
-    short: 3600, // 1 hour
-    medium: 86400, // 24 hours
-    long: 604800, // 7 days
-  };
-
   private invalidatedTokens: Set<string> = new Set();
-
   private readonly logger = new Logger(AuthService.name);
 
   constructor(
@@ -65,13 +58,7 @@ export class AuthService {
       },
     });
 
-    // Generate JWT token (medium expiration - 24h)
-    const token = this.generateToken(
-      newUser.id,
-      newUser.email,
-      newUser.role,
-      this.TOKEN_EXPIRATION.medium,
-    );
+    const token = this.generateToken(newUser.id, newUser.email, newUser.role);
 
     return {
       message: 'User registered successfully',
@@ -97,15 +84,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Generate JWT token (medium expiration - 24h)
-    const token = this.generateToken(
-      user.id,
-      user.email,
-      user.role,
-      this.TOKEN_EXPIRATION.medium,
-    );
+    const token = this.generateToken(user.id, user.email, user.role);
 
-    // Return user data without password
     return {
       message: 'Login successful',
       user: this.excludePassword(user),
@@ -382,21 +362,18 @@ export class AuthService {
     return result;
   }
 
-  private generateToken(
-    userId: string,
-    email: string,
-    role: Role,
-    expiresInSeconds: number = this.TOKEN_EXPIRATION.medium,
-  ): string {
-    const payload = {
-      sub: userId,
-      email,
-      role,
-    };
-
-    return this.jwtService.sign(payload, {
-      expiresIn: expiresInSeconds,
-    });
+  private generateToken(userId: string, email: string, role: Role): string {
+    return this.jwtService.sign(
+      {
+        sub: userId,
+        email,
+        role,
+      },
+      {
+        secret: envs.jwt.secret,
+        expiresIn: envs.jwt.expiresIn,
+      },
+    );
   }
 
   private excludePassword<T extends { password?: string }>(

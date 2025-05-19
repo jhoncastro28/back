@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ToggleActiveService } from '../common/services/toggle-active.service';
 import { CreatePriceDto, FilterPriceDto, UpdatePriceDto } from './dto';
 import { PricesController } from './prices.controller';
 import { PricesService } from './prices.service';
@@ -6,14 +7,18 @@ import { PricesService } from './prices.service';
 describe('PricesController', () => {
   let controller: PricesController;
   let service: PricesService;
+  let toggleActiveService: ToggleActiveService;
 
   const mockPricesService = {
     create: jest.fn(),
     findAll: jest.fn(),
     findOne: jest.fn(),
     update: jest.fn(),
-    remove: jest.fn(),
     getCurrentPriceForProduct: jest.fn(),
+  };
+
+  const mockToggleActiveService = {
+    toggleActive: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -24,11 +29,16 @@ describe('PricesController', () => {
           provide: PricesService,
           useValue: mockPricesService,
         },
+        {
+          provide: ToggleActiveService,
+          useValue: mockToggleActiveService,
+        },
       ],
     }).compile();
 
     controller = module.get<PricesController>(PricesController);
     service = module.get<PricesService>(PricesService);
+    toggleActiveService = module.get<ToggleActiveService>(ToggleActiveService);
   });
 
   it('should be defined', () => {
@@ -189,20 +199,51 @@ describe('PricesController', () => {
     });
   });
 
-  describe('remove', () => {
-    it('should remove a price', async () => {
-      // Arrange
+  describe('deactivate', () => {
+    it('should deactivate a price', async () => {
       const priceId = 1;
+      const expectedResult = {
+        message: 'price deactivated successfully',
+        data: {
+          id: priceId,
+          isActive: false,
+        },
+      };
 
-      mockPricesService.remove.mockResolvedValue(undefined);
+      mockToggleActiveService.toggleActive.mockResolvedValue(expectedResult);
 
-      // Act
-      const result = await controller.remove(priceId);
+      const result = await controller.deactivate(priceId);
 
-      // Assert
-      expect(result).toBeUndefined();
-      expect(service.remove).toHaveBeenCalledWith(priceId);
-      expect(service.remove).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(expectedResult);
+      expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
+        'price',
+        priceId,
+        { isActive: false },
+      );
+    });
+  });
+
+  describe('activate', () => {
+    it('should activate a price', async () => {
+      const priceId = 1;
+      const expectedResult = {
+        message: 'price activated successfully',
+        data: {
+          id: priceId,
+          isActive: true,
+        },
+      };
+
+      mockToggleActiveService.toggleActive.mockResolvedValue(expectedResult);
+
+      const result = await controller.activate(priceId);
+
+      expect(result).toEqual(expectedResult);
+      expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
+        'price',
+        priceId,
+        { isActive: true },
+      );
     });
   });
 });

@@ -20,6 +20,7 @@ import {
 import { Roles } from '../auth/decorators';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards';
 import { Role } from '../auth/interfaces';
+import { ToggleActiveService } from '../common/services/toggle-active.service';
 import { DiscountsService } from './discounts.service';
 import { CreateDiscountDto, FilterDiscountDto, UpdateDiscountDto } from './dto';
 
@@ -27,7 +28,10 @@ import { CreateDiscountDto, FilterDiscountDto, UpdateDiscountDto } from './dto';
 @Controller('discounts')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class DiscountsController {
-  constructor(private readonly discountsService: DiscountsService) {}
+  constructor(
+    private readonly discountsService: DiscountsService,
+    private readonly toggleActiveService: ToggleActiveService,
+  ) {}
 
   @Post()
   @Roles(Role.ADMINISTRATOR)
@@ -135,12 +139,30 @@ export class DiscountsController {
 
   @Delete(':id')
   @Roles(Role.ADMINISTRATOR)
-  @ApiOperation({ summary: 'Delete a discount' })
-  @ApiResponse({ status: 200, description: 'Discount successfully deleted' })
+  @ApiOperation({ summary: 'Deactivate a discount (logical deletion)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Discount successfully deactivated',
+  })
   @ApiResponse({ status: 404, description: 'Discount not found' })
   @ApiResponse({ status: 403, description: 'Forbidden - Administrators only' })
   @ApiParam({ name: 'id', description: 'Discount ID', example: 1 })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.discountsService.remove(id);
+  deactivate(@Param('id', ParseIntPipe) id: number) {
+    return this.toggleActiveService.toggleActive('discount', id, {
+      isActive: false,
+    });
+  }
+
+  @Patch(':id/activate')
+  @Roles(Role.ADMINISTRATOR)
+  @ApiOperation({ summary: 'Activate a discount' })
+  @ApiResponse({ status: 200, description: 'Discount successfully activated' })
+  @ApiResponse({ status: 404, description: 'Discount not found' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Administrators only' })
+  @ApiParam({ name: 'id', description: 'Discount ID', example: 1 })
+  activate(@Param('id', ParseIntPipe) id: number) {
+    return this.toggleActiveService.toggleActive('discount', id, {
+      isActive: true,
+    });
   }
 }

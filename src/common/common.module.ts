@@ -1,4 +1,6 @@
-import { Global, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
+import { PrismaModule } from '../prisma/prisma.module';
+import { ToggleActiveService } from './services/toggle-active.service';
 
 /**
  * Common Module
@@ -10,9 +12,9 @@ import { Global, Module } from '@nestjs/common';
  * Marked as @Global to make it available application-wide without
  * explicitly importing it in every module.
  */
-@Global()
 @Module({
-  providers: [],
-  exports: [],
+  imports: [PrismaModule],
+  providers: [ToggleActiveService],
+  exports: [ToggleActiveService],
 })
 export class CommonModule {}

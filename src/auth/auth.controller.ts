@@ -17,6 +17,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { ToggleActiveService } from '../common/services/toggle-active.service';
 import { AuthService } from './auth.service';
 import { Public, Roles } from './decorators';
 import {
@@ -36,7 +37,10 @@ import { Role } from './interfaces';
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly toggleActiveService: ToggleActiveService,
+  ) {}
 
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({
@@ -238,7 +242,36 @@ export class AuthController {
   @Roles(Role.ADMINISTRATOR)
   @Delete('users/:id')
   deactivateUser(@Param('id') id: string) {
-    return this.authService.toggleUserActive(id, { isActive: false });
+    return this.toggleActiveService.toggleActive('user', id, {
+      isActive: false,
+    });
+  }
+
+  @ApiOperation({ summary: 'Activate user' })
+  @ApiResponse({
+    status: 200,
+    description: 'User successfully activated',
+    type: UserResponse,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'User not found',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Administrators only',
+  })
+  @ApiBearerAuth()
+  @Roles(Role.ADMINISTRATOR)
+  @Patch('users/:id/activate')
+  activateUser(@Param('id') id: string) {
+    return this.toggleActiveService.toggleActive('user', id, {
+      isActive: true,
+    });
   }
 
   @ApiOperation({ summary: 'Admin only endpoint' })

@@ -23,6 +23,7 @@ import {
 import { Roles } from '../auth/decorators';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards';
 import { Role } from '../auth/interfaces';
+import { ToggleActiveService } from '../common/services/toggle-active.service';
 import {
   AdjustStockDto,
   CreateProductDto,
@@ -36,7 +37,10 @@ import { ProductsService } from './products.service';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly toggleActiveService: ToggleActiveService,
+  ) {}
 
   @Post()
   @Roles(Role.ADMINISTRATOR)
@@ -243,7 +247,32 @@ export class ProductsController {
   })
   @ApiParam({ name: 'id', description: 'Product ID', example: 1 })
   deactivate(@Param('id', ParseIntPipe) id: number) {
-    return this.productsService.deactivate(id);
+    return this.toggleActiveService.toggleActive('product', id, {
+      isActive: false,
+    });
+  }
+
+  @Patch(':id/activate')
+  @Roles(Role.ADMINISTRATOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Activate a product' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Product successfully activated',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Product not found',
+  })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'Forbidden - Administrators only',
+  })
+  @ApiParam({ name: 'id', description: 'Product ID', example: 1 })
+  activate(@Param('id', ParseIntPipe) id: number) {
+    return this.toggleActiveService.toggleActive('product', id, {
+      isActive: true,
+    });
   }
 
   @Get('reports/stock-status')
