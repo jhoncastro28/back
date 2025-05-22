@@ -1,11 +1,22 @@
 import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
 import { CommonModule } from '../common/common.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ClientsController } from './clients.controller';
 import { ClientsService } from './clients.service';
+import { envs } from '../config/envs';
 
 @Module({
-  imports: [PrismaModule, CommonModule],
+  imports: [
+    PrismaModule,
+    CommonModule,
+    JwtModule.register({
+      secret: envs.jwt.secret,
+      signOptions: {
+        expiresIn: envs.jwt.expiresIn,
+      },
+    }),
+  ],
   controllers: [ClientsController],
   providers: [ClientsService],
   exports: [ClientsService],

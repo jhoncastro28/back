@@ -20,13 +20,14 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { Roles } from '../auth/decorators';
+import { Roles, Public } from '../auth/decorators';
 import { JwtAuthGuard, RolesGuard } from '../auth/guards';
 import { Role } from '../auth/interfaces';
 import { ToggleActiveService } from '../common/services/toggle-active.service';
 import { ClientsService } from './clients.service';
 import { CreateClientDto, FilterClientDto, UpdateClientDto } from './dto';
 import { ClientResponse, PaginatedClientsResponse } from './entities';
+import { LoginClientDto } from './dto/login-client.dto';
 
 /**
  * Clients Controller
@@ -43,6 +44,22 @@ export class ClientsController {
     private readonly toggleActiveService: ToggleActiveService,
   ) {}
 
+  @Public()
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Login with document credentials' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Login successful' })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Client not found or inactive',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Invalid document credentials',
+  })
+  loginClient(@Body() loginClientDto: LoginClientDto) {
+    return this.clientsService.loginWithDocument(loginClientDto);
+  }
   /**
    * Create a new client
    */

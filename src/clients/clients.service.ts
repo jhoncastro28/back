@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { PaginatedResult } from '../common/interfaces';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -10,6 +11,7 @@ import {
   FilterClientDto,
   ToggleActiveDto,
   UpdateClientDto,
+  LoginClientDto,
 } from './dto';
 
 /**
@@ -20,7 +22,61 @@ import {
  */
 @Injectable()
 export class ClientsService {
-  constructor(private readonly prismaService: PrismaService) {}
+  constructor(
+    private readonly prismaService: PrismaService,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  async loginWithDocument(loginClientDto: LoginClientDto) {
+    const { documentType, documentNumber } = loginClientDto;
+
+    // Find client with matching document
+    const client = await this.prismaService.client.findFirst({
+      where: {
+        documentType,
+        documentNumber,
+        isActive: true,
+      },
+    });
+
+    if (!client) {
+      throw new NotFoundException(
+        `Client with document ${documentType} ${documentNumber} not found or inactive`,
+      );
+    }
+
+    // Generate a JWT token
+    const token = this.jwtService.sign(
+      {
+        sub: client.id,
+        type: 'client', // Mark as client token to differentiate from user tokens
+        documentType: client.documentType,
+        documentNumber: client.documentNumber,
+      },
+      {
+        secret: process.env.JWT_SECRET,
+        expiresIn: process.env.JWT_EXPIRES_IN,
+      },
+    );
+
+    return {
+      message: 'Login successful',
+      user: {
+        // We're using "user" as the property to maintain compatibility with the existing auth response structure
+        id: client.id,
+        firstName: client.name.split(' ')[0],
+        lastName: client.name.split(' ').slice(1).join(' '),
+        email: client.email || '',
+        documentType: client.documentType,
+        documentNumber: client.documentNumber,
+        role: 'CLIENT', // Special role for clients
+        isActive: client.isActive,
+        createdAt: client.createdAt,
+        updatedAt: client.updatedAt,
+      },
+      token,
+    };
+  }
 
   /**
    * Create a new client
