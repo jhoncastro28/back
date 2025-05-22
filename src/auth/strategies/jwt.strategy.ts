@@ -37,6 +37,30 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         );
       }
 
+      // Check if this is a client token
+      if (payload.type === 'client') {
+        const client = await this.prismaService.client.findUnique({
+          where: { id: payload.sub },
+        });
+
+        if (!client) {
+          throw new UnauthorizedException('Client not found');
+        }
+
+        if (!client.isActive) {
+          throw new UnauthorizedException('Client is inactive');
+        }
+
+        return {
+          id: payload.sub,
+          type: 'client',
+          documentType: payload.documentType,
+          documentNumber: payload.documentNumber,
+          isActive: client.isActive,
+        };
+      }
+
+      // Logic for users
       const user = await this.prismaService.user.findUnique({
         where: { id: payload.sub },
       });

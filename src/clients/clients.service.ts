@@ -45,37 +45,180 @@ export class ClientsService {
       );
     }
 
-    // Generate a JWT token
-    const token = this.jwtService.sign(
-      {
-        sub: client.id,
-        type: 'client', // Mark as client token to differentiate from user tokens
-        documentType: client.documentType,
-        documentNumber: client.documentNumber,
-      },
-      {
-        secret: process.env.JWT_SECRET,
-        expiresIn: process.env.JWT_EXPIRES_IN,
-      },
-    );
+    // Generate a JWT token using the configured JwtService
+    const token = this.jwtService.sign({
+      sub: client.id,
+      type: 'client',
+      documentType: client.documentType,
+      documentNumber: client.documentNumber,
+    });
 
     return {
       message: 'Login successful',
       user: {
-        // We're using "user" as the property to maintain compatibility with the existing auth response structure
         id: client.id,
         firstName: client.name.split(' ')[0],
         lastName: client.name.split(' ').slice(1).join(' '),
         email: client.email || '',
         documentType: client.documentType,
         documentNumber: client.documentNumber,
-        role: 'CLIENT', // Special role for clients
+        role: 'CLIENT',
         isActive: client.isActive,
         createdAt: client.createdAt,
         updatedAt: client.updatedAt,
       },
       token,
     };
+  }
+
+  /**
+   * Get orders for a specific client
+   */
+  async getClientOrders(clientId: number) {
+    try {
+      const client = await this.prismaService.client.findUnique({
+        where: { id: clientId },
+      });
+
+      if (!client || !client.isActive) {
+        throw new NotFoundException(
+          `Client with ID ${clientId} not found or inactive`,
+        );
+      }
+
+      // Get all sales for this client
+      const sales = await this.prismaService.sale.findMany({
+        where: {
+          clientId: clientId,
+        },
+        include: {
+          saleDetails: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          saleDate: 'desc',
+        },
+      });
+
+      // Transform sales to match the expected order format
+      const orders = sales.map((sale) => ({
+        id: sale.id.toString(),
+        orderNumber: `ORD-${sale.id.toString().padStart(6, '0')}`,
+        date: sale.saleDate.toISOString(),
+        status: 'completed',
+        items: sale.saleDetails.map((detail) => ({
+          id: detail.id.toString(),
+          name: detail.product.name,
+          quantity: detail.quantity,
+          price: Number(detail.unitPrice),
+        })),
+        subtotal: Number(sale.totalAmount),
+        tax: 0,
+        shipping: 0,
+        total: Number(sale.totalAmount),
+        address: client.address || 'No address provided',
+        paymentMethod: 'Cash',
+      }));
+
+      return {
+        data: orders,
+        message: 'Orders retrieved successfully',
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException(
+        'Error retrieving client orders: ' + error.message,
+      );
+    }
+  }
+
+  /**
+   * Get specific order details for a client
+   */
+  async getClientOrderDetails(clientId: number, orderId: number) {
+    try {
+      const client = await this.prismaService.client.findUnique({
+        where: { id: clientId },
+      });
+
+      if (!client || !client.isActive) {
+        throw new NotFoundException(
+          `Client with ID ${clientId} not found or inactive`,
+        );
+      }
+
+      // Get specific sale for this client
+      const sale = await this.prismaService.sale.findFirst({
+        where: {
+          id: orderId,
+          clientId: clientId,
+        },
+        include: {
+          saleDetails: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!sale) {
+        throw new NotFoundException(
+          `Order with ID ${orderId} not found or does not belong to this client`,
+        );
+      }
+
+      // Transform to order detail format
+      const orderDetail = {
+        id: sale.id.toString(),
+        orderNumber: `ORD-${sale.id.toString().padStart(6, '0')}`,
+        date: sale.saleDate.toISOString(),
+        status: 'completed',
+        items: sale.saleDetails.map((detail) => ({
+          id: detail.id.toString(),
+          name: detail.product.name,
+          quantity: detail.quantity,
+          price: Number(detail.unitPrice),
+        })),
+        subtotal: Number(sale.totalAmount),
+        tax: 0,
+        shipping: 0,
+        discount: 0,
+        total: Number(sale.totalAmount),
+        address: client.address || 'No address provided',
+        paymentMethod: 'Cash',
+        store: 'Almendros',
+      };
+
+      return {
+        data: orderDetail,
+        message: 'Order details retrieved successfully',
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException(
+        'Error retrieving order details: ' + error.message,
+      );
+    }
   }
 
   /**

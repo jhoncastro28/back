@@ -5,7 +5,7 @@ import { DocumentType } from '../entities/client.entity';
 export class LoginClientDto {
   @ApiProperty({
     example: 'CC',
-    description: 'Document type (CC, CE, TI, PA)',
+    description: 'Document type (CC, TI)',
     enum: DocumentType,
   })
   @IsEnum(DocumentType, { message: 'Document type must be valid' })
