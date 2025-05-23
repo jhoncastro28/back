@@ -13,14 +13,16 @@ export class ClientAuthGuard extends AuthGuard('jwt') {
 
   handleRequest(err: any, user: any, _info: any) {
     // Allow only client tokens
-    if (err || !user || user.type !== 'client') {
-      throw (
-        err ||
-        new UnauthorizedException(
-          'Only mobile clients can access this endpoint',
-        )
+    if (err || !user) {
+      throw err || new UnauthorizedException('Authentication required');
+    }
+
+    if (user.type !== 'client') {
+      throw new UnauthorizedException(
+        'Only mobile clients can access this endpoint',
       );
     }
+
     return user;
   }
 }

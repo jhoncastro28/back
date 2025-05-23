@@ -8,7 +8,6 @@ import {
   Query,
   Request,
   UseGuards,
-  UnauthorizedException,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -18,12 +17,12 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards';
+import { ClientAuthGuard } from '../auth/guards/client-auth.guard';
 import { ClientsService } from './clients.service';
 
 @ApiTags('Mobile Client')
 @Controller('mobile/client')
-@UseGuards(JwtAuthGuard)
+@UseGuards(ClientAuthGuard)
 @ApiBearerAuth()
 export class MobileClientController {
   constructor(private readonly clientsService: ClientsService) {}
@@ -40,12 +39,6 @@ export class MobileClientController {
   @Get('orders')
   @HttpCode(HttpStatus.OK)
   getMyOrders(@Request() req) {
-    if (req.user?.type !== 'client') {
-      throw new UnauthorizedException(
-        'This endpoint is only for mobile clients',
-      );
-    }
-
     return this.clientsService.getClientOrders(req.user.id);
   }
 
@@ -65,12 +58,6 @@ export class MobileClientController {
     @Param('orderId', ParseIntPipe) orderId: number,
     @Request() req,
   ) {
-    if (req.user?.type !== 'client') {
-      throw new UnauthorizedException(
-        'This endpoint is only for mobile clients',
-      );
-    }
-
     return this.clientsService.getClientOrderDetails(req.user.id, orderId);
   }
 
@@ -98,12 +85,6 @@ export class MobileClientController {
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    if (req.user?.type !== 'client') {
-      throw new UnauthorizedException(
-        'This endpoint is only for mobile clients',
-      );
-    }
-
     return this.clientsService.getPurchaseHistory(req.user.id, {
       page,
       limit,

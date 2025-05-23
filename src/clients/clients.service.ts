@@ -114,7 +114,7 @@ export class ClientsService {
         id: sale.id.toString(),
         orderNumber: `ORD-${sale.id.toString().padStart(6, '0')}`,
         date: sale.saleDate.toISOString(),
-        status: 'completed',
+        status: 'completed' as const,
         items: sale.saleDetails.map((detail) => ({
           id: detail.id.toString(),
           name: detail.product.name,
