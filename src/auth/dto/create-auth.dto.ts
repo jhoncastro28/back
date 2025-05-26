@@ -1,71 +1,135 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import {
   IsEmail,
   IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
+  MaxLength,
   MinLength,
 } from 'class-validator';
-import { Role } from '../entities';
+import { Role } from '../interfaces';
 
+/**
+ * Data Transfer Object for user registration
+ *
+ * Handles new user data validation with comprehensive rules:
+ * - Email format and uniqueness validation
+ * - Strong password requirements (uppercase, lowercase, numbers, special chars)
+ * - Name format validation
+ * - Optional role assignment
+ * - Optional contact information
+ *
+ * @example
+ * ```typescript
+ * {
+ *   "email": "john.doe@example.com",
+ *   "password": "StrongP@ss123",
+ *   "firstName": "John",
+ *   "lastName": "Doe",
+ *   "role": "SALESPERSON",
+ *   "phoneNumber": "+1234567890",
+ *   "address": "123 Main St, City, Country"
+ * }
+ * ```
+ */
 export class CreateAuthDto {
   @ApiProperty({
-    example: 'user@example.com',
-    description: 'Email address for user registration',
+    example: 'john.doe@example.com',
+    description: 'User email address',
+    format: 'email',
+    uniqueItems: true,
+    required: true,
   })
   @IsEmail({}, { message: 'Email format is not valid' })
   @IsNotEmpty({ message: 'Email is required' })
   email: string;
 
   @ApiProperty({
-    example: 'password123',
-    description: 'Password for user registration (min 6 characters)',
+    example: 'StrongP@ss123',
+    description: 'User password',
+    minLength: 8,
+    maxLength: 32,
+    required: true,
+    pattern:
+      '^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]+$',
   })
-  @IsString({ message: 'Password must be a string' })
+  @IsString()
+  @MinLength(8, { message: 'Password must be at least 8 characters long' })
+  @MaxLength(32, { message: 'Password must not exceed 32 characters' })
+  @Matches(
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]+$/,
+    {
+      message:
+        'Password must contain at least one uppercase letter, one lowercase letter, one number and one special character',
+    },
+  )
   @IsNotEmpty({ message: 'Password is required' })
-  @MinLength(6, { message: 'Password must be at least 6 characters long' })
   password: string;
 
   @ApiProperty({
     example: 'John',
-    description: 'First name of the user',
+    description: 'User first name',
+    minLength: 2,
+    maxLength: 50,
+    required: true,
   })
   @IsString({ message: 'First name must be a string' })
+  @MinLength(2, { message: 'First name must be at least 2 characters long' })
+  @MaxLength(50, { message: 'First name must not exceed 50 characters' })
   @IsNotEmpty({ message: 'First name is required' })
   firstName: string;
 
   @ApiProperty({
     example: 'Doe',
-    description: 'Last name of the user',
+    description: 'User last name',
+    minLength: 2,
+    maxLength: 50,
+    required: true,
   })
   @IsString({ message: 'Last name must be a string' })
+  @MinLength(2, { message: 'Last name must be at least 2 characters long' })
+  @MaxLength(50, { message: 'Last name must not exceed 50 characters' })
   @IsNotEmpty({ message: 'Last name is required' })
   lastName: string;
 
-  @ApiPropertyOptional({
-    example: 'SALESPERSON',
-    description: 'Role of the user (SALESPERSON or ADMINISTRATOR)',
+  @ApiProperty({
+    example: Role.SALESPERSON,
+    description:
+      'User role in the system. Available roles: SALESPERSON, ADMINISTRATOR',
     enum: Role,
-    default: 'SALESPERSON',
+    enumName: 'Role',
+    required: false,
+    default: Role.SALESPERSON,
   })
-  @IsEnum(Role, { message: 'Role must be either SALESPERSON or ADMINISTRATOR' })
   @IsOptional()
+  @IsEnum(Role, {
+    message: 'Role must be either SALESPERSON or ADMINISTRATOR',
+  })
   role?: Role;
 
-  @ApiPropertyOptional({
-    example: '+1 555-123-4567',
-    description: 'Phone number of the user',
+  @ApiProperty({
+    example: '+1234567890',
+    description: 'User phone number in international format',
+    required: false,
+    pattern: '^\+?[1-9]\d{1,14}$',
   })
-  @IsString({ message: 'Phone number must be a string' })
   @IsOptional()
+  @IsString({ message: 'Phone number must be a string' })
+  @Matches(/^\+?[1-9]\d{1,14}$/, {
+    message: 'Phone number must be in international format',
+  })
   phoneNumber?: string;
 
-  @ApiPropertyOptional({
-    example: '123 Main St, City',
-    description: 'Address of the user',
+  @ApiProperty({
+    example: '123 Main St, City, Country',
+    description: 'User physical address',
+    required: false,
+    maxLength: 200,
   })
-  @IsString({ message: 'Address must be a string' })
   @IsOptional()
+  @IsString({ message: 'Address must be a string' })
+  @MaxLength(200, { message: 'Address must not exceed 200 characters' })
   address?: string;
 }

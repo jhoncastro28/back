@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Decimal } from '@prisma/client/runtime/library';
 import { ToggleActiveService } from '../common/services/toggle-active.service';
 import { CreatePriceDto, FilterPriceDto, UpdatePriceDto } from './dto';
 import { PricesController } from './prices.controller';
@@ -9,16 +10,36 @@ describe('PricesController', () => {
   let service: PricesService;
   let toggleActiveService: ToggleActiveService;
 
-  const mockPricesService = {
-    create: jest.fn(),
-    findAll: jest.fn(),
-    findOne: jest.fn(),
-    update: jest.fn(),
-    getCurrentPriceForProduct: jest.fn(),
+  const mockPrice = {
+    id: 1,
+    purchasePrice: new Decimal(100),
+    sellingPrice: new Decimal(150),
+    productId: 1,
+    isCurrentPrice: true,
+    validFrom: new Date(),
+    validTo: null,
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    product: {
+      id: 1,
+      name: 'Test Product',
+      description: 'A test product',
+    },
+    discounts: [],
   };
 
-  const mockToggleActiveService = {
-    toggleActive: jest.fn(),
+  const mockPaginatedResponse = {
+    data: [mockPrice],
+    meta: {
+      total: 1,
+      page: 1,
+      limit: 10,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    },
+    message: 'Prices retrieved successfully',
   };
 
   beforeEach(async () => {
@@ -27,11 +48,42 @@ describe('PricesController', () => {
       providers: [
         {
           provide: PricesService,
-          useValue: mockPricesService,
+          useValue: {
+            create: jest.fn().mockResolvedValue({
+              message: 'Price created successfully',
+              price: mockPrice,
+            }),
+            findAll: jest.fn().mockResolvedValue(mockPaginatedResponse),
+            findOne: jest.fn().mockResolvedValue({
+              message: 'Price found successfully',
+              price: mockPrice,
+            }),
+            update: jest.fn().mockResolvedValue({
+              message: 'Price updated successfully',
+              price: mockPrice,
+            }),
+            getCurrentPriceForProduct: jest.fn().mockResolvedValue({
+              message: 'Current price retrieved successfully',
+              price: mockPrice,
+            }),
+          },
         },
         {
           provide: ToggleActiveService,
-          useValue: mockToggleActiveService,
+          useValue: {
+            toggleActive: jest.fn().mockImplementation((type, id, data) => {
+              if (data.isActive) {
+                return Promise.resolve({
+                  message: 'Price activated successfully',
+                  data: { id, isActive: true },
+                });
+              }
+              return Promise.resolve({
+                message: 'Price deactivated successfully',
+                data: { id, isActive: false },
+              });
+            }),
+          },
         },
       ],
     }).compile();
@@ -43,11 +95,12 @@ describe('PricesController', () => {
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+    expect(service).toBeDefined();
+    expect(toggleActiveService).toBeDefined();
   });
 
   describe('create', () => {
-    it('should create a price', async () => {
-      // Arrange
+    it('should create a new price', async () => {
       const createPriceDto: CreatePriceDto = {
         purchasePrice: 100,
         sellingPrice: 150,
@@ -55,195 +108,103 @@ describe('PricesController', () => {
         isCurrentPrice: true,
       };
 
-      const expectedResult = {
-        id: 1,
-        purchasePrice: 100,
-        sellingPrice: 150,
-        productId: 1,
-        isCurrentPrice: true,
-        validFrom: new Date(),
-        validTo: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      mockPricesService.create.mockResolvedValue(expectedResult);
-
-      // Act
       const result = await controller.create(createPriceDto);
-
-      // Assert
-      expect(result).toEqual(expectedResult);
       expect(service.create).toHaveBeenCalledWith(createPriceDto);
-      expect(service.create).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({
+        message: 'Price created successfully',
+        price: mockPrice,
+      });
     });
   });
 
   describe('findAll', () => {
     it('should return paginated prices', async () => {
-      // Arrange
       const filterDto: FilterPriceDto = {
         page: 1,
         limit: 10,
       };
 
-      const expectedResult = {
-        data: [
-          {
-            id: 1,
-            purchasePrice: 100,
-            sellingPrice: 150,
-            productId: 1,
-            isCurrentPrice: true,
-          },
-        ],
-        meta: {
-          total: 1,
-          page: 1,
-          limit: 10,
-          totalPages: 1,
-          hasNextPage: false,
-          hasPrevPage: false,
-        },
-      };
-
-      mockPricesService.findAll.mockResolvedValue(expectedResult);
-
-      // Act
       const result = await controller.findAll(filterDto);
-
-      // Assert
-      expect(result).toEqual(expectedResult);
       expect(service.findAll).toHaveBeenCalledWith(filterDto);
-      expect(service.findAll).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(mockPaginatedResponse);
     });
-  });
 
-  describe('findOne', () => {
-    it('should return a price by ID', async () => {
-      // Arrange
-      const priceId = 1;
-
-      const expectedResult = {
-        id: priceId,
-        purchasePrice: 100,
-        sellingPrice: 150,
+    it('should handle search filters', async () => {
+      const filterDto: FilterPriceDto = {
         productId: 1,
         isCurrentPrice: true,
       };
 
-      mockPricesService.findOne.mockResolvedValue(expectedResult);
+      const result = await controller.findAll(filterDto);
+      expect(service.findAll).toHaveBeenCalledWith(filterDto);
+      expect(result).toEqual(mockPaginatedResponse);
+    });
+  });
 
-      // Act
-      const result = await controller.findOne(priceId);
-
-      // Assert
-      expect(result).toEqual(expectedResult);
-      expect(service.findOne).toHaveBeenCalledWith(priceId);
-      expect(service.findOne).toHaveBeenCalledTimes(1);
+  describe('findOne', () => {
+    it('should return a price by id', async () => {
+      const result = await controller.findOne(1);
+      expect(service.findOne).toHaveBeenCalledWith(1);
+      expect(result).toEqual({
+        message: 'Price found successfully',
+        price: mockPrice,
+      });
     });
   });
 
   describe('getCurrentPriceForProduct', () => {
     it('should return the current price for a product', async () => {
-      // Arrange
-      const productId = 1;
-
-      const expectedResult = {
-        id: 1,
-        purchasePrice: 100,
-        sellingPrice: 150,
-        productId,
-        isCurrentPrice: true,
-      };
-
-      mockPricesService.getCurrentPriceForProduct.mockResolvedValue(
-        expectedResult,
-      );
-
-      // Act
-      const result = await controller.getCurrentPriceForProduct(productId);
-
-      // Assert
-      expect(result).toEqual(expectedResult);
-      expect(service.getCurrentPriceForProduct).toHaveBeenCalledWith(productId);
-      expect(service.getCurrentPriceForProduct).toHaveBeenCalledTimes(1);
+      const result = await controller.getCurrentPriceForProduct(1);
+      expect(service.getCurrentPriceForProduct).toHaveBeenCalledWith(1);
+      expect(result).toEqual({
+        message: 'Current price retrieved successfully',
+        price: mockPrice,
+      });
     });
   });
 
   describe('update', () => {
     it('should update a price', async () => {
-      // Arrange
-      const priceId = 1;
       const updatePriceDto: UpdatePriceDto = {
         sellingPrice: 200,
       };
 
-      const expectedResult = {
-        id: priceId,
-        purchasePrice: 100,
-        sellingPrice: 200,
-        productId: 1,
-        isCurrentPrice: true,
-      };
-
-      mockPricesService.update.mockResolvedValue(expectedResult);
-
-      // Act
-      const result = await controller.update(priceId, updatePriceDto);
-
-      // Assert
-      expect(result).toEqual(expectedResult);
-      expect(service.update).toHaveBeenCalledWith(priceId, updatePriceDto);
-      expect(service.update).toHaveBeenCalledTimes(1);
+      const result = await controller.update(1, updatePriceDto);
+      expect(service.update).toHaveBeenCalledWith(1, updatePriceDto);
+      expect(result).toEqual({
+        message: 'Price updated successfully',
+        price: mockPrice,
+      });
     });
   });
 
   describe('deactivate', () => {
     it('should deactivate a price', async () => {
-      const priceId = 1;
-      const expectedResult = {
-        message: 'price deactivated successfully',
-        data: {
-          id: priceId,
-          isActive: false,
-        },
-      };
-
-      mockToggleActiveService.toggleActive.mockResolvedValue(expectedResult);
-
-      const result = await controller.deactivate(priceId);
-
-      expect(result).toEqual(expectedResult);
+      const result = await controller.deactivate(1);
       expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
         'price',
-        priceId,
+        1,
         { isActive: false },
       );
+      expect(result).toEqual({
+        message: 'Price deactivated successfully',
+        data: { id: 1, isActive: false },
+      });
     });
   });
 
   describe('activate', () => {
     it('should activate a price', async () => {
-      const priceId = 1;
-      const expectedResult = {
-        message: 'price activated successfully',
-        data: {
-          id: priceId,
-          isActive: true,
-        },
-      };
-
-      mockToggleActiveService.toggleActive.mockResolvedValue(expectedResult);
-
-      const result = await controller.activate(priceId);
-
-      expect(result).toEqual(expectedResult);
+      const result = await controller.activate(1);
       expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
         'price',
-        priceId,
+        1,
         { isActive: true },
       );
+      expect(result).toEqual({
+        message: 'Price activated successfully',
+        data: { id: 1, isActive: true },
+      });
     });
   });
 });

@@ -22,7 +22,6 @@ export class RolesGuard implements CanActivate {
       context.getClass(),
     ]);
 
-    // If no roles are required, allow access
     if (!requiredRoles || requiredRoles.length === 0) {
       return true;
     }
@@ -34,7 +33,6 @@ export class RolesGuard implements CanActivate {
     this.logger.debug(`User object: ${JSON.stringify(user)}`);
     this.logger.debug(`Token from headers: ${request.headers.authorization}`);
 
-    // Check if user exists
     if (!user) {
       this.logger.error('No user object found in request');
       throw new ForbiddenException(
@@ -42,7 +40,6 @@ export class RolesGuard implements CanActivate {
       );
     }
 
-    // Check if user has a role
     if (!user.role) {
       this.logger.error('User has no role property');
       throw new ForbiddenException(
@@ -50,7 +47,6 @@ export class RolesGuard implements CanActivate {
       );
     }
 
-    // Check if user role is in required roles
     const hasRole = requiredRoles.includes(user.role);
     this.logger.debug(`User has required role: ${hasRole}`);
 

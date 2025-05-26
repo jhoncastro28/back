@@ -7,8 +7,9 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { PaginatedResult } from '../common/interfaces';
-import { envs } from '../config/envs';
+import { Role } from '../../generated/prisma';
+import { PaginatedResponse } from '../common/interfaces/pagination.interface';
+import { PaginationService } from '../common/services/pagination.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateAuthDto,
@@ -17,21 +18,43 @@ import {
   ToggleActiveDto,
   UpdateAuthDto,
 } from './dto';
-import { Role } from './interfaces';
+import { SessionService } from './services/session.service';
 
+/**
+ * Authentication Service
+ *
+ * Handles all authentication-related operations including:
+ * - User registration and login
+ * - Session management
+ * - User management (CRUD operations)
+ * - Role-based access control
+ */
 @Injectable()
 export class AuthService {
-  private invalidatedTokens: Set<string> = new Set();
   private readonly logger = new Logger(AuthService.name);
 
   constructor(
     private readonly prismaService: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly sessionService: SessionService,
+    private readonly paginationService: PaginationService,
   ) {
-    // Clean expired tokens every hour
-    setInterval(() => this.cleanExpiredTokens(), 3600000);
+    setInterval(async () => {
+      try {
+        await this.sessionService.cleanupExpiredSessions();
+        this.logger.debug('Cleaned up expired sessions');
+      } catch (error) {
+        this.logger.error(`Error cleaning expired sessions: ${error.message}`);
+      }
+    }, 3600000);
   }
 
+  /**
+   * Creates a new user account with the provided information
+   * @param createAuthDto - Data transfer object containing user registration information
+   * @returns Object containing success message, user data (excluding password), and JWT token
+   * @throws ConflictException if email is already registered
+   */
   async signup(createAuthDto: CreateAuthDto) {
     const { email, password, firstName, lastName, role, phoneNumber, address } =
       createAuthDto;
@@ -60,6 +83,8 @@ export class AuthService {
 
     const token = this.generateToken(newUser.id, newUser.email, newUser.role);
 
+    await this.sessionService.trackSession(newUser.id, token);
+
     return {
       message: 'User registered successfully',
       user: this.excludePassword(newUser),
@@ -67,6 +92,12 @@ export class AuthService {
     };
   }
 
+  /**
+   * Authenticates a user and creates a new session
+   * @param loginAuthDto - Data transfer object containing login credentials
+   * @returns Object containing success message, user data (excluding password), and JWT token
+   * @throws UnauthorizedException if credentials are invalid
+   */
   async login(loginAuthDto: LoginAuthDto) {
     const { email, password } = loginAuthDto;
 
@@ -86,6 +117,8 @@ export class AuthService {
 
     const token = this.generateToken(user.id, user.email, user.role);
 
+    await this.sessionService.trackSession(user.id, token);
+
     return {
       message: 'Login successful',
       user: this.excludePassword(user),
@@ -95,17 +128,18 @@ export class AuthService {
 
   /**
    * Logs out a user by invalidating their JWT token
-   * @param userId The ID of the user to logout
-   * @param tokenId Optional specific token to invalidate
+   * @param userId - The ID of the user to logout
+   * @param tokenId - Optional specific token to invalidate
    * @returns Success message object
+   * @throws UnauthorizedException if logout process fails
    */
   async logout(userId: string, tokenId?: string) {
     try {
       if (tokenId) {
-        this.invalidatedTokens.add(tokenId);
+        await this.sessionService.invalidateSession(userId, tokenId);
         this.logger.debug(`Token invalidated: ${tokenId}`);
       } else {
-        this.invalidatedTokens.add(userId);
+        await this.sessionService.invalidateAllUserSessions(userId);
         this.logger.debug(`User's tokens invalidated: ${userId}`);
       }
 
@@ -119,26 +153,20 @@ export class AuthService {
   }
 
   /**
-   * Logout using a raw token string
-   * @param token The JWT token to invalidate
+   * Invalidates a specific JWT token
+   * @param token - The JWT token to invalidate
    * @returns Success message object
    */
   async logoutWithToken(token: string) {
     try {
-      this.invalidatedTokens.add(token);
-      this.logger.debug(`Token invalidated: ${token.substring(0, 10)}...`);
-
       try {
         const decoded = this.jwtService.verify(token);
         if (decoded?.sub) {
-          this.invalidatedTokens.add(decoded.sub);
-          this.logger.debug(`User's tokens invalidated: ${decoded.sub}`);
+          await this.sessionService.invalidateSession(decoded.sub, token);
+          this.logger.debug(`User's session invalidated: ${decoded.sub}`);
         }
       } catch (error) {
-        this.logger.warn(`Could not decode token, but still blacklisted it`);
-        this.logger.error(
-          `Error decoding token: ${error.message}. Token blacklisted anyway.`,
-        );
+        this.logger.warn(`Could not decode token: ${error.message}`);
       }
 
       return {
@@ -152,39 +180,43 @@ export class AuthService {
     }
   }
 
+  /**
+   * Checks if a token has been invalidated
+   * @param token - The JWT token to check
+   * @returns boolean indicating if the token is invalidated
+   */
   isTokenInvalidated(token: string): boolean {
-    return this.invalidatedTokens.has(token);
-  }
-
-  private cleanExpiredTokens() {
     try {
-      const currentTokens = [...this.invalidatedTokens];
-      let removedCount = 0;
-
-      for (const token of currentTokens) {
-        try {
-          this.jwtService.verify(token);
-        } catch (error) {
-          if (error.name === 'TokenExpiredError') {
-            this.invalidatedTokens.delete(token);
-            removedCount++;
-          }
-        }
+      if (!token) {
+        this.logger.warn('No token provided');
+        return true;
       }
 
-      if (removedCount > 0) {
-        this.logger.debug(
-          `Removed ${removedCount} expired tokens from blacklist`,
-        );
+      const decoded = this.jwtService.decode(token);
+      if (!decoded || typeof decoded !== 'object' || !decoded.sub) {
+        this.logger.warn('Invalid token format');
+        return true;
       }
+
+      const isActive = this.sessionService.isSessionActive(decoded.sub, token);
+      this.logger.debug(
+        `Token active status for user ${decoded.sub}: ${isActive}`,
+      );
+      return !isActive;
     } catch (error) {
-      this.logger.error(`Error cleaning expired tokens: ${error.message}`);
+      this.logger.warn(`Token verification failed: ${error.message}`);
+      return true;
     }
   }
 
+  /**
+   * Retrieves a paginated list of users with optional filters
+   * @param filterUserDto - Data transfer object containing filter criteria
+   * @returns Paginated response containing filtered user data
+   */
   async findAllUsers(
     filterUserDto: FilterUserDto = {},
-  ): Promise<PaginatedResult<any>> {
+  ): Promise<PaginatedResponse<any>> {
     const {
       page = 1,
       limit = 10,
@@ -197,7 +229,6 @@ export class AuthService {
 
     const where: any = {};
 
-    // Apply filters if provided
     if (firstName) {
       where.firstName = {
         contains: firstName,
@@ -227,48 +258,48 @@ export class AuthService {
       where.isActive = isActive;
     }
 
-    const skip = (page - 1) * limit;
+    const skip = this.paginationService.getPaginationSkip(page, limit);
 
-    const users = await this.prismaService.user.findMany({
-      where,
-      skip,
-      take: limit,
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        phoneNumber: true,
-        address: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true,
-        password: false,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    const [users, total] = await Promise.all([
+      this.prismaService.user.findMany({
+        where,
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          phoneNumber: true,
+          address: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+          password: false,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      }),
+      this.prismaService.user.count({ where }),
+    ]);
 
-    const total = await this.prismaService.user.count({ where });
-
-    const totalPages = Math.ceil(total / limit);
-
-    return {
-      data: users,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages,
-        hasNextPage: page < totalPages,
-        hasPreviousPage: page > 1,
-      },
-      message: 'Users retrieved successfully',
-    };
+    return this.paginationService.createPaginationObject(
+      users,
+      total,
+      page,
+      limit,
+      'Users retrieved successfully',
+    );
   }
 
+  /**
+   * Retrieves a user by their ID
+   * @param id - The ID of the user to find
+   * @returns User data excluding password
+   * @throws NotFoundException if user is not found
+   */
   async findUserById(id: string) {
     const user = await this.prismaService.user.findUnique({
       where: { id },
@@ -297,6 +328,13 @@ export class AuthService {
     };
   }
 
+  /**
+   * Updates user information
+   * @param id - The ID of the user to update
+   * @param updateAuthDto - Data transfer object containing update information
+   * @returns Updated user data excluding password
+   * @throws NotFoundException if user is not found
+   */
   async updateUser(id: string, updateAuthDto: UpdateAuthDto) {
     const existingUser = await this.prismaService.user.findUnique({
       where: { id },
@@ -325,6 +363,13 @@ export class AuthService {
     };
   }
 
+  /**
+   * Toggles a user's active status
+   * @param id - The ID of the user to toggle
+   * @param toggleActiveDto - Data transfer object containing active status
+   * @returns Updated user data excluding password
+   * @throws NotFoundException if user is not found
+   */
   async toggleUserActive(id: string, toggleActiveDto: ToggleActiveDto) {
     const existingUser = await this.prismaService.user.findUnique({
       where: { id },
@@ -349,39 +394,54 @@ export class AuthService {
     };
   }
 
-  async getUserRole(userId: string) {
-    const result = await this.prismaService.user.findUnique({
+  /**
+   * Retrieves a user's role
+   * @param userId - The ID of the user
+   * @returns The user's role
+   * @throws NotFoundException if user is not found
+   */
+  async getUserRole(userId: string): Promise<Role> {
+    const user = await this.prismaService.user.findUnique({
       where: { id: userId },
       select: { role: true },
     });
 
-    if (!result) {
+    if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    return result;
+    return user.role;
   }
 
+  /**
+   * Generates a JWT token for a user
+   * @param userId - The user's ID
+   * @param email - The user's email
+   * @param role - The user's role
+   * @returns Signed JWT token
+   */
   private generateToken(userId: string, email: string, role: Role): string {
-    return this.jwtService.sign(
-      {
-        sub: userId,
-        email,
-        role,
-      },
-      {
-        secret: envs.jwt.secret,
-        expiresIn: envs.jwt.expiresIn,
-      },
-    );
+    const payload = {
+      sub: userId,
+      email,
+      role,
+    };
+
+    return this.jwtService.sign(payload);
   }
 
+  /**
+   * Safely removes the password field from a user object
+   * @param user User object that may contain a password
+   * @returns User object without the password field
+   */
   private excludePassword<T extends { password?: string }>(
     user: T,
   ): Omit<T, 'password'> {
-    const userWithoutPassword = { ...user };
-    delete userWithoutPassword.password;
+    if (!user) return user;
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password, ...userWithoutPassword } = user;
     return userWithoutPassword;
   }
 }

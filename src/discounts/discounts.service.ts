@@ -1,13 +1,23 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { PaginatedResponse } from '../common/interfaces/pagination.interface';
+import { PaginationService } from '../common/services/pagination.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDiscountDto, FilterDiscountDto, UpdateDiscountDto } from './dto';
 
 @Injectable()
 export class DiscountsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly paginationService: PaginationService,
+  ) {}
 
+  /**
+   * Creates a new discount for a specific price
+   * @param createDiscountDto - The data to create the discount
+   * @throws NotFoundException - If the price doesn't exist
+   * @returns The created discount with its associated price and product
+   */
   async create(createDiscountDto: CreateDiscountDto) {
-    // First, check if the price exists
     const priceExists = await this.prisma.price.findUnique({
       where: { id: createDiscountDto.priceId },
     });
@@ -18,7 +28,6 @@ export class DiscountsService {
       );
     }
 
-    // Convert dates to Date objects
     const data = {
       ...createDiscountDto,
       startDate: new Date(createDiscountDto.startDate),
@@ -27,7 +36,6 @@ export class DiscountsService {
         : null,
     };
 
-    // Create the discount
     return this.prisma.discount.create({
       data,
       include: {
@@ -40,7 +48,14 @@ export class DiscountsService {
     });
   }
 
-  async findAll(filters: FilterDiscountDto = {}) {
+  /**
+   * Retrieves all discounts with optional filtering and pagination
+   * @param filters - Optional filters including name, type, dates, status, and pagination parameters
+   * @returns Paginated response containing filtered discounts
+   */
+  async findAll(
+    filters: FilterDiscountDto = {},
+  ): Promise<PaginatedResponse<any>> {
     const {
       name,
       type,
@@ -76,7 +91,6 @@ export class DiscountsService {
       where.priceId = priceId;
     }
 
-    // Date range filters
     if (startDateFrom || startDateTo) {
       where.startDate = {};
 
@@ -101,12 +115,10 @@ export class DiscountsService {
       }
     }
 
-    // Filter for currently valid discounts
     if (isCurrentlyValid !== undefined) {
       const now = new Date();
 
       if (isCurrentlyValid) {
-        // startDate <= now AND (endDate is null OR endDate >= now)
         where.AND = [
           {
             startDate: {
@@ -127,7 +139,6 @@ export class DiscountsService {
           },
         ];
       } else {
-        // startDate > now OR endDate < now
         where.OR = [
           {
             startDate: {
@@ -143,45 +154,42 @@ export class DiscountsService {
       }
     }
 
-    // Calculate skip for pagination
-    const skip = (page - 1) * limit;
+    const skip = this.paginationService.getPaginationSkip(page, limit);
 
-    // Get total discount count for these filters
-    const total = await this.prisma.discount.count({ where });
-
-    // Get paginated discounts
-    const discounts = await this.prisma.discount.findMany({
-      where,
-      skip,
-      take: limit,
-      include: {
-        price: {
-          include: {
-            product: true,
+    const [discounts, total] = await Promise.all([
+      this.prisma.discount.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          price: {
+            include: {
+              product: true,
+            },
           },
         },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+        orderBy: {
+          createdAt: 'desc',
+        },
+      }),
+      this.prisma.discount.count({ where }),
+    ]);
 
-    // Calculate total pages
-    const totalPages = Math.ceil(total / limit);
-
-    return {
-      data: discounts,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1,
-      },
-    };
+    return this.paginationService.createPaginationObject(
+      discounts,
+      total,
+      page,
+      limit,
+      'Discounts retrieved successfully',
+    );
   }
 
+  /**
+   * Retrieves a specific discount by its ID
+   * @param id - The ID of the discount to find
+   * @throws NotFoundException - If the discount doesn't exist
+   * @returns The discount with its associated price and product
+   */
   async findOne(id: number) {
     const discount = await this.prisma.discount.findUnique({
       where: { id },
@@ -201,8 +209,14 @@ export class DiscountsService {
     return discount;
   }
 
+  /**
+   * Updates an existing discount
+   * @param id - The ID of the discount to update
+   * @param updateDiscountDto - The data to update the discount
+   * @throws NotFoundException - If the discount doesn't exist
+   * @returns The updated discount with its associated price and product
+   */
   async update(id: number, updateDiscountDto: UpdateDiscountDto) {
-    // Check if the discount exists
     const existingDiscount = await this.prisma.discount.findUnique({
       where: { id },
     });
@@ -211,10 +225,8 @@ export class DiscountsService {
       throw new NotFoundException(`Discount with ID ${id} not found`);
     }
 
-    // Prepare data for update
     const data: any = { ...updateDiscountDto };
 
-    // Convert dates to Date objects if provided
     if (updateDiscountDto.startDate) {
       data.startDate = new Date(updateDiscountDto.startDate);
     }
@@ -223,7 +235,6 @@ export class DiscountsService {
       data.endDate = new Date(updateDiscountDto.endDate);
     }
 
-    // Update the discount
     return this.prisma.discount.update({
       where: { id },
       data,
@@ -237,8 +248,12 @@ export class DiscountsService {
     });
   }
 
+  /**
+   * Removes a discount from the system
+   * @param id - The ID of the discount to remove
+   * @throws NotFoundException - If the discount doesn't exist
+   */
   async remove(id: number) {
-    // Check if the discount exists
     const discount = await this.prisma.discount.findUnique({
       where: { id },
     });
@@ -247,14 +262,18 @@ export class DiscountsService {
       throw new NotFoundException(`Discount with ID ${id} not found`);
     }
 
-    // Delete the discount
     await this.prisma.discount.delete({
       where: { id },
     });
   }
 
+  /**
+   * Retrieves all currently valid discounts for a specific price
+   * @param priceId - The ID of the price to get current discounts for
+   * @throws NotFoundException - If the price doesn't exist
+   * @returns Array of currently valid discounts for the specified price
+   */
   async getCurrentDiscounts(priceId: number) {
-    // First, check if the price exists
     const priceExists = await this.prisma.price.findUnique({
       where: { id: priceId },
     });
@@ -265,7 +284,6 @@ export class DiscountsService {
 
     const now = new Date();
 
-    // Get all valid discounts for this price
     return this.prisma.discount.findMany({
       where: {
         priceId,

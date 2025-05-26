@@ -27,6 +27,7 @@ import { ToggleActiveService } from '../common/services/toggle-active.service';
 import {
   AdjustStockDto,
   CreateProductDto,
+  CreateProductWithPriceDto,
   FilterProductDto,
   UpdateProductDto,
 } from './dto';
@@ -64,6 +65,19 @@ export class ProductsController {
   })
   create(@Body() createProductDto: CreateProductDto) {
     return this.productsService.create(createProductDto);
+  }
+
+  @Post('with-price')
+  @ApiOperation({
+    summary: 'Create a new product with optional price and discount',
+  })
+  @ApiResponse({
+    status: 201,
+    description:
+      'Product created successfully with price and discount information',
+  })
+  createWithPrice(@Body() createProductDto: CreateProductWithPriceDto) {
+    return this.productsService.createWithPrice(createProductDto);
   }
 
   @Get()
@@ -143,6 +157,18 @@ export class ProductsController {
   @ApiParam({ name: 'id', description: 'Product ID', example: 1 })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.productsService.findOne(id);
+  }
+
+  @Get(':id/with-price-and-discount')
+  @ApiOperation({
+    summary: 'Get a product with its current price and active discounts',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Product retrieved with price and discount information',
+  })
+  findOneWithPriceAndDiscount(@Param('id', ParseIntPipe) id: number) {
+    return this.productsService.findOneWithPriceAndDiscount(id);
   }
 
   @Get(':id/price-history')

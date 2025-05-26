@@ -6,20 +6,25 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { ToggleActiveDto } from '../dto/toggle-active.dto';
 
+/**
+ * Service responsible for handling entity activation/deactivation operations
+ * Provides a generic way to toggle the active status of any entity in the system
+ */
 @Injectable()
 export class ToggleActiveService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Toggle the active status of an entity
+   * Toggles the active status of a specified entity
    * @param model - The Prisma model name (e.g., 'user', 'product', 'client')
-   * @param id - The entity ID
-   * @param dto - The ToggleActiveDto containing the new active status
-   * @returns The updated entity with a success message
+   * @param id - The unique identifier of the entity
+   * @param dto - DTO containing the new active status
+   * @returns Object containing the updated entity and a success message
+   * @throws NotFoundException when the entity is not found
+   * @throws BadRequestException when the update operation fails
    */
   async toggleActive(model: string, id: number | string, dto: ToggleActiveDto) {
     try {
-      // Check if the entity exists
       const existingEntity = await this.prisma[model].findUnique({
         where: { id },
       });
@@ -28,7 +33,6 @@ export class ToggleActiveService {
         throw new NotFoundException(`${model} with ID ${id} not found`);
       }
 
-      // Update the active status of the entity
       const updatedEntity = await this.prisma[model].update({
         where: { id },
         data: {

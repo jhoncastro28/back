@@ -3,22 +3,38 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { PaginatedResponse } from '../common/interfaces/pagination.interface';
+import { PaginationService } from '../common/services/pagination.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
 import {
   CreateInventoryMovementDto,
   FilterInventoryMovementDto,
-  MovementType,
   UpdateInventoryMovementDto,
 } from './dto';
+import { MovementType } from './dto/inventory-movement.types';
 
+/**
+ * Service responsible for managing inventory movements
+ * Handles creation, retrieval, and management of stock movements including entries and exits
+ * Provides functionality for stock tracking, alerts, and reporting
+ */
 @Injectable()
 export class InventoryMovementsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly productsService: ProductsService,
+    private readonly paginationService: PaginationService,
   ) {}
 
+  /**
+   * Creates a new inventory movement and updates product stock accordingly
+   * @param createInventoryMovementDto - Data for creating the movement
+   * @param userId - ID of the user creating the movement
+   * @returns Created movement with related entities
+   * @throws BadRequestException when supplier ID is missing for entries
+   * @throws NotFoundException when product, supplier, or sale is not found
+   */
   async create(
     createInventoryMovementDto: CreateInventoryMovementDto,
     userId: string,
@@ -26,14 +42,12 @@ export class InventoryMovementsService {
     const { type, productId, supplierId, saleId, quantity } =
       createInventoryMovementDto;
 
-    // Validate input based on movement type
     if (type === MovementType.ENTRY && !supplierId) {
       throw new BadRequestException(
         'Supplier ID is required for inventory entries',
       );
     }
 
-    // Check if the product exists
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
     });
@@ -42,7 +56,6 @@ export class InventoryMovementsService {
       throw new NotFoundException(`Product with ID ${productId} not found`);
     }
 
-    // If supplier is provided, check if it exists
     if (supplierId) {
       const supplier = await this.prisma.supplier.findUnique({
         where: { id: supplierId },
@@ -52,7 +65,6 @@ export class InventoryMovementsService {
       }
     }
 
-    // If sale is provided, check if it exists
     if (saleId) {
       const sale = await this.prisma.sale.findUnique({
         where: { id: saleId },
@@ -62,12 +74,9 @@ export class InventoryMovementsService {
       }
     }
 
-    // Calculate stock quantity adjustment based on movement type
     const stockAdjustment = type === MovementType.ENTRY ? quantity : -quantity;
 
-    // Use a transaction to ensure both the movement and stock update succeed or fail together
     const inventoryMovement = await this.prisma.$transaction(async (tx) => {
-      // Create the inventory movement
       const movement = await tx.inventoryMovement.create({
         data: {
           ...createInventoryMovementDto,
@@ -88,7 +97,6 @@ export class InventoryMovementsService {
         },
       });
 
-      // Update the product stock
       await this.productsService.updateStock(productId, stockAdjustment);
 
       return movement;
@@ -100,7 +108,14 @@ export class InventoryMovementsService {
     };
   }
 
-  async findAll(filters: FilterInventoryMovementDto = {}) {
+  /**
+   * Retrieves all inventory movements with filtering and pagination
+   * @param filters - Optional filters for type, product, supplier, sale, date range, and reason
+   * @returns Paginated list of inventory movements with related entities
+   */
+  async findAll(
+    filters: FilterInventoryMovementDto = {},
+  ): Promise<PaginatedResponse<any>> {
     const {
       type,
       productId,
@@ -138,7 +153,6 @@ export class InventoryMovementsService {
       };
     }
 
-    // Date range filtering
     if (dateFrom || dateTo) {
       where.movementDate = {};
 
@@ -151,52 +165,48 @@ export class InventoryMovementsService {
       }
     }
 
-    // Calculate skip for pagination
-    const skip = (page - 1) * limit;
+    const skip = this.paginationService.getPaginationSkip(page, limit);
 
-    // Get total count for these filters
-    const total = await this.prisma.inventoryMovement.count({ where });
-
-    // Get paginated inventory movements
-    const movements = await this.prisma.inventoryMovement.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: {
-        movementDate: 'desc',
-      },
-      include: {
-        product: true,
-        supplier: true,
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
+    const [movements, total] = await Promise.all([
+      this.prisma.inventoryMovement.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: {
+          movementDate: 'desc',
         },
-        sale: true,
-      },
-    });
+        include: {
+          product: true,
+          supplier: true,
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
+          sale: true,
+        },
+      }),
+      this.prisma.inventoryMovement.count({ where }),
+    ]);
 
-    // Calculate total pages
-    const totalPages = Math.ceil(total / limit);
-
-    return {
-      data: movements,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1,
-      },
-      message: 'Inventory movements retrieved successfully',
-    };
+    return this.paginationService.createPaginationObject(
+      movements,
+      total,
+      page,
+      limit,
+      'Inventory movements retrieved successfully',
+    );
   }
 
+  /**
+   * Retrieves a specific inventory movement by ID
+   * @param id - Movement's unique identifier
+   * @returns Movement with related entities
+   * @throws NotFoundException when movement is not found
+   */
   async findOne(id: number) {
     const movement = await this.prisma.inventoryMovement.findUnique({
       where: { id },
@@ -225,11 +235,18 @@ export class InventoryMovementsService {
     };
   }
 
+  /**
+   * Updates an inventory movement's non-critical information
+   * @param id - Movement's unique identifier
+   * @param updateInventoryMovementDto - Data to update (only reason and notes)
+   * @returns Updated movement with related entities
+   * @throws NotFoundException when movement is not found
+   * @throws BadRequestException when attempting to update critical fields
+   */
   async update(
     id: number,
     updateInventoryMovementDto: UpdateInventoryMovementDto,
   ) {
-    // Check if the movement exists
     const existingMovement = await this.prisma.inventoryMovement.findUnique({
       where: { id },
     });
@@ -237,9 +254,6 @@ export class InventoryMovementsService {
     if (!existingMovement) {
       throw new NotFoundException(`Inventory movement with ID ${id} not found`);
     }
-
-    // Note: We'll only allow updating notes and reason, not quantities or types
-    // as this would require complex stock adjustments
 
     if (
       updateInventoryMovementDto.type !== undefined ||
@@ -280,8 +294,13 @@ export class InventoryMovementsService {
     };
   }
 
+  /**
+   * Attempts to remove an inventory movement (operation not allowed)
+   * @param id - Movement's unique identifier
+   * @throws BadRequestException as movements cannot be deleted
+   * @throws NotFoundException when movement is not found
+   */
   async remove(id: number) {
-    // Check if the movement exists
     const existingMovement = await this.prisma.inventoryMovement.findUnique({
       where: { id },
     });
@@ -290,17 +309,24 @@ export class InventoryMovementsService {
       throw new NotFoundException(`Inventory movement with ID ${id} not found`);
     }
 
-    // For inventory movements, we don't allow deletion as it would affect stock history
     throw new BadRequestException(
       'Inventory movements cannot be deleted to maintain accurate stock history.',
     );
   }
 
+  /**
+   * Retrieves movement history for a specific product
+   * @param productId - Product's unique identifier
+   * @param filters - Optional filters for pagination and date range
+   * @returns Paginated list of movements for the specified product
+   * @throws NotFoundException when product is not found
+   */
   async getProductMovementsHistory(
     productId: number,
     filters: FilterInventoryMovementDto = {},
-  ) {
-    // Check if the product exists
+  ): Promise<PaginatedResponse<any>> {
+    const { page = 1, limit = 10, dateFrom, dateTo } = filters;
+
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
     });
@@ -309,22 +335,67 @@ export class InventoryMovementsService {
       throw new NotFoundException(`Product with ID ${productId} not found`);
     }
 
-    // Override the productId in filters
-    filters.productId = productId;
+    const where: any = {
+      productId,
+    };
 
-    // Use the findAll method to get paginated results
-    return this.findAll(filters);
+    if (dateFrom || dateTo) {
+      where.movementDate = {};
+
+      if (dateFrom) {
+        where.movementDate.gte = dateFrom;
+      }
+
+      if (dateTo) {
+        where.movementDate.lte = dateTo;
+      }
+    }
+
+    const skip = this.paginationService.getPaginationSkip(page, limit);
+
+    const [movements, total] = await Promise.all([
+      this.prisma.inventoryMovement.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: {
+          movementDate: 'desc',
+        },
+        include: {
+          product: true,
+          supplier: true,
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
+          sale: true,
+        },
+      }),
+      this.prisma.inventoryMovement.count({ where }),
+    ]);
+
+    return this.paginationService.createPaginationObject(
+      movements,
+      total,
+      page,
+      limit,
+      `Inventory movements for product ${product.name} retrieved successfully`,
+    );
   }
 
   /**
-   * Returns a list of products that are below their minimum stock level or above their maximum stock level
-   * This helps inventory managers to quickly identify products that need to be restocked or that have excess inventory
+   * Retrieves products with stock levels outside their defined thresholds
+   * @returns Object containing lists of products with low and high stock levels
+   * Helps inventory managers identify products that need attention
    */
   async getStockAlerts() {
     const productsWithLowStock = await this.prisma.product.findMany({
       where: {
         isActive: true,
-        // Use a raw query to check if currentStock < minQuantity
         currentStock: {
           lt: this.prisma.product.fields.minQuantity,
         },
@@ -347,7 +418,6 @@ export class InventoryMovementsService {
         },
       },
       orderBy: {
-        // First sort by how critical the shortage is
         currentStock: 'asc',
       },
     });
@@ -355,9 +425,7 @@ export class InventoryMovementsService {
     const productsWithHighStock = await this.prisma.product.findMany({
       where: {
         isActive: true,
-        // Only include products with defined maxQuantity
         maxQuantity: { not: null },
-        // Check if currentStock > maxQuantity
         currentStock: {
           gt: this.prisma.product.fields.maxQuantity,
         },
@@ -380,7 +448,6 @@ export class InventoryMovementsService {
         },
       },
       orderBy: {
-        // Sort by excess amount (highest excess first)
         currentStock: 'desc',
       },
     });
@@ -395,15 +462,17 @@ export class InventoryMovementsService {
   }
 
   /**
-   * Generates a report of stock transactions within a specific date range
-   * Useful for inventory auditing and analysis
+   * Generates a comprehensive report of stock transactions for a specified period
+   * @param dateFrom - Start date for the report period
+   * @param dateTo - End date for the report period
+   * @returns Detailed report including summary statistics and movement details
+   * @throws BadRequestException when date range is invalid
    */
   async generateStockTransactionsReport(dateFrom: Date, dateTo: Date) {
     if (dateFrom > dateTo) {
       throw new BadRequestException('Start date must be before end date');
     }
 
-    // Get all movements within the date range
     const movements = await this.prisma.inventoryMovement.findMany({
       where: {
         movementDate: {
@@ -439,7 +508,6 @@ export class InventoryMovementsService {
       },
     });
 
-    // Calculate summary statistics
     const summary = {
       totalMovements: movements.length,
       entriesCount: movements.filter((m) => m.type === 'ENTRY').length,
@@ -454,7 +522,6 @@ export class InventoryMovementsService {
       periodEnd: dateTo,
     };
 
-    // Get products with most movements
     const productMovements = {};
     movements.forEach((movement) => {
       const productId = movement.productId;

@@ -8,6 +8,16 @@
 
 DATABASE_URL="postgresql://postgres:toJqyk-fyddip-0mitki@database-1.ctqcu2026zag.us-east-2.rds.amazonaws.com:5432/almendros?schema=public"
 
+# Server Configuration
+
 PORT=3000
+NODE_ENV=development
+
+# Security
+
 JWT_SECRET=fcb6d649db54bdc5f7bb90b7089eebbafa37a6f066afb9585e843c3ba349dac9976a821d537d1bd8c5e9f04539e5f421f8bd00a6d30ee4ff9c50dfa521c49900e123c150cf9dac0bcc0ce1324cd6e99b31d7b63aed83eda18e54f1bff25289d7d6e510d34a3e47dd08a24391075377af2961986446e0b315ebb0df812d5872fbbad94da479a0d8440ae9e2eb7db1c73ace08f31db314db09d80294b871fc50099eee7e9e209bd0866d6f265555a68e19da4eb838864114cf381ccaeced832de9ed635abf5b72784fb8a84ab143bbcd6a0c065fbedd8d9139d48112bb6108b046c3163f657725c49ede0812912e39b1f1048392ddf2168a9c87ad699b25e307af
-JWT_EXPIRATION=1d
+JWT_EXPIRES_IN=1d
+
+# CORS Configuration
+
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:4200,https://almendros.com,http://localhost:5173

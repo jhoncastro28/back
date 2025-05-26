@@ -1,0 +1,87 @@
+import {
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseIntPipe,
+  Query,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { ClientAuthGuard } from '../../auth/guards/client-auth.guard';
+import { MobileOrderDto } from './dto/mobile-order.dto';
+import { MobileService } from './mobile.service';
+
+@ApiTags('Mobile Client')
+@Controller('mobile/client')
+@UseGuards(ClientAuthGuard)
+@ApiBearerAuth()
+export class MobileController {
+  constructor(private readonly mobileService: MobileService) {}
+
+  @ApiOperation({ summary: 'Get client orders (mobile app)' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Orders retrieved successfully',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Invalid or expired token',
+  })
+  @Get('orders')
+  @HttpCode(HttpStatus.OK)
+  getMyOrders(@Request() req) {
+    return this.mobileService.getClientOrders(req.user.id);
+  }
+
+  @ApiOperation({ summary: 'Get specific order details (mobile app)' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Order details retrieved successfully',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Order not found or does not belong to client',
+  })
+  @ApiParam({ name: 'orderId', description: 'Order ID', example: 1 })
+  @Get('orders/:orderId')
+  @HttpCode(HttpStatus.OK)
+  getOrderDetails(
+    @Param('orderId', ParseIntPipe) orderId: number,
+    @Request() req,
+  ) {
+    return this.mobileService.getOrderDetails(req.user.id, orderId);
+  }
+
+  @ApiOperation({ summary: 'Get client purchase history (mobile app)' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Purchase history retrieved successfully',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (starting from 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of items per page',
+  })
+  @Get('purchase-history')
+  @HttpCode(HttpStatus.OK)
+  getPurchaseHistory(@Request() req, @Query() orderDto: MobileOrderDto) {
+    return this.mobileService.getPurchaseHistory(req.user.id, orderDto);
+  }
+}

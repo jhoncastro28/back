@@ -20,6 +20,7 @@ import {
 import { ToggleActiveService } from '../common/services/toggle-active.service';
 import { AuthService } from './auth.service';
 import { Public, Roles } from './decorators';
+import { PublicRateLimit } from './decorators/throttler.decorator';
 import {
   CreateAuthDto,
   FilterUserDto,
@@ -34,15 +35,35 @@ import {
 } from './entities';
 import { Role } from './interfaces';
 
+/**
+ * Authentication Controller
+ *
+ * Handles all authentication and user management HTTP endpoints including:
+ * - User registration and authentication
+ * - User profile management
+ * - User activation/deactivation
+ * - Role-based access control
+ *
+ * All endpoints except signup and login require authentication.
+ * Some endpoints require specific roles (ADMINISTRATOR, SALESPERSON).
+ */
 @ApiTags('Authentication')
 @Controller('auth')
+@ApiBearerAuth()
+@ApiResponse({
+  status: 401,
+  description: 'Unauthorized - Invalid or expired token',
+})
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly toggleActiveService: ToggleActiveService,
   ) {}
 
-  @ApiOperation({ summary: 'Register a new user' })
+  @ApiOperation({
+    summary: 'Register a new user',
+    description: 'Creates a new user account. No authentication required.',
+  })
   @ApiResponse({
     status: 201,
     description: 'User registered successfully',
@@ -52,13 +73,22 @@ export class AuthController {
     status: 409,
     description: 'Email already registered',
   })
+  @ApiResponse({
+    status: 429,
+    description: 'Too Many Requests - Rate limit exceeded',
+  })
   @Public()
+  @PublicRateLimit(3, 60000)
   @Post('signup')
   signup(@Body() createAuthDto: CreateAuthDto) {
     return this.authService.signup(createAuthDto);
   }
 
-  @ApiOperation({ summary: 'Login with credentials' })
+  @ApiOperation({
+    summary: 'Login with credentials',
+    description:
+      'Authenticates user and returns JWT token. No authentication required.',
+  })
   @ApiResponse({
     status: 200,
     description: 'Login successful',
@@ -68,39 +98,45 @@ export class AuthController {
     status: 401,
     description: 'Invalid credentials',
   })
+  @ApiResponse({
+    status: 429,
+    description: 'Too Many Requests - Rate limit exceeded',
+  })
   @Public()
+  @PublicRateLimit(5, 60000)
   @Post('login')
   login(@Body() loginAuthDto: LoginAuthDto) {
     return this.authService.login(loginAuthDto);
   }
 
-  @ApiOperation({ summary: 'Logout current user' })
+  @ApiOperation({
+    summary: 'Logout current user',
+    description:
+      'Invalidates the current session token. Requires authentication.',
+  })
   @ApiResponse({
     status: 200,
     description: 'Logout successful',
     type: LogoutResponse,
   })
-  @ApiBearerAuth()
-  @Public()
   @Post('logout')
   logout(@Headers('authorization') authHeader: string) {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.split(' ')[1];
       return this.authService.logoutWithToken(token);
     }
-
     return { message: 'Successfully logged out' };
   }
 
-  @ApiOperation({ summary: 'Get all users with pagination and filtering' })
+  @ApiOperation({
+    summary: 'Get all users with pagination and filtering',
+    description:
+      'Retrieves a paginated list of users. Requires authentication and proper role.',
+  })
   @ApiResponse({
     status: 200,
     description: 'Users retrieved successfully',
     type: PaginatedUsersResponse,
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
   })
   @ApiResponse({
     status: 403,
@@ -148,14 +184,17 @@ export class AuthController {
     type: Boolean,
     description: 'Filter by active/inactive status',
   })
-  @ApiBearerAuth()
   @Roles(Role.ADMINISTRATOR, Role.SALESPERSON)
   @Get('users')
   findAllUsers(@Query() filterUserDto: FilterUserDto) {
     return this.authService.findAllUsers(filterUserDto);
   }
 
-  @ApiOperation({ summary: 'Get user by ID' })
+  @ApiOperation({
+    summary: 'Get user by ID',
+    description:
+      'Retrieves a specific user by ID. Requires authentication and proper role.',
+  })
   @ApiResponse({
     status: 200,
     description: 'User found successfully',
@@ -166,36 +205,34 @@ export class AuthController {
     description: 'User not found',
   })
   @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
-  @ApiResponse({
     status: 403,
     description: 'Forbidden - Insufficient permissions',
   })
-  @ApiBearerAuth()
   @Roles(Role.ADMINISTRATOR, Role.SALESPERSON)
   @Get('users/:id')
   findUserById(@Param('id') id: string) {
     return this.authService.findUserById(id);
   }
 
-  @ApiOperation({ summary: 'Get current user role' })
+  @ApiOperation({
+    summary: 'Get current user role',
+    description:
+      'Returns the role of the authenticated user. Requires authentication.',
+  })
   @ApiResponse({
     status: 200,
     description: 'Role retrieved successfully',
   })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
-  @ApiBearerAuth()
   @Get('role')
   getUserRole(@Request() req) {
     return this.authService.getUserRole(req.user.id);
   }
 
-  @ApiOperation({ summary: 'Update user' })
+  @ApiOperation({
+    summary: 'Update user',
+    description:
+      'Updates user information. Requires authentication and administrator role.',
+  })
   @ApiResponse({
     status: 200,
     description: 'User updated successfully',
@@ -206,24 +243,23 @@ export class AuthController {
     description: 'User not found',
   })
   @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
-  @ApiResponse({
     status: 403,
     description: 'Forbidden - Insufficient permissions',
   })
-  @ApiBearerAuth()
   @Roles(Role.ADMINISTRATOR)
   @Patch('users/:id')
   updateUser(@Param('id') id: string, @Body() updateAuthDto: UpdateAuthDto) {
     return this.authService.updateUser(id, updateAuthDto);
   }
 
-  @ApiOperation({ summary: 'Deactivate user (logical deletion)' })
+  @ApiOperation({
+    summary: 'Deactivate user',
+    description:
+      'Deactivates a user account (logical deletion). Requires authentication and administrator role.',
+  })
   @ApiResponse({
     status: 200,
-    description: 'User successfully deactivated',
+    description: 'User deactivated successfully',
     type: UserResponse,
   })
   @ApiResponse({
@@ -231,14 +267,9 @@ export class AuthController {
     description: 'User not found',
   })
   @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
-  @ApiResponse({
     status: 403,
-    description: 'Forbidden - Administrators only',
+    description: 'Forbidden - Insufficient permissions',
   })
-  @ApiBearerAuth()
   @Roles(Role.ADMINISTRATOR)
   @Delete('users/:id')
   deactivateUser(@Param('id') id: string) {
@@ -247,10 +278,14 @@ export class AuthController {
     });
   }
 
-  @ApiOperation({ summary: 'Activate user' })
+  @ApiOperation({
+    summary: 'Activate user',
+    description:
+      'Activates a previously deactivated user account. Requires authentication and administrator role.',
+  })
   @ApiResponse({
     status: 200,
-    description: 'User successfully activated',
+    description: 'User activated successfully',
     type: UserResponse,
   })
   @ApiResponse({
@@ -258,38 +293,36 @@ export class AuthController {
     description: 'User not found',
   })
   @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
-  @ApiResponse({
     status: 403,
-    description: 'Forbidden - Administrators only',
+    description: 'Forbidden - Insufficient permissions',
   })
-  @ApiBearerAuth()
   @Roles(Role.ADMINISTRATOR)
-  @Patch('users/:id/activate')
+  @Post('users/:id/activate')
   activateUser(@Param('id') id: string) {
     return this.toggleActiveService.toggleActive('user', id, {
       isActive: true,
     });
   }
 
-  @ApiOperation({ summary: 'Admin only endpoint' })
+  @ApiOperation({
+    summary: 'Admin only test endpoint',
+    description:
+      'Test endpoint for administrator role. Requires authentication.',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Admin access successful',
+    description: 'Access granted',
   })
   @ApiResponse({
     status: 403,
-    description: 'Forbidden - Admin role required',
+    description: 'Forbidden - Insufficient permissions',
   })
-  @ApiBearerAuth()
   @Roles(Role.ADMINISTRATOR)
-  @Get('admin-only')
+  @Get('admin')
   adminOnly(@Request() req) {
     return {
-      message: 'Admin access successful',
-      user: req.user,
+      message: 'You have access to admin content',
+      userId: req.user.id,
     };
   }
 }

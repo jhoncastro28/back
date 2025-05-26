@@ -1,13 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { PaginationDto } from '../common/dto';
+import { Role } from '../../generated/prisma';
 import { ToggleActiveService } from '../common/services/toggle-active.service';
 import '../config/test.envs';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import {
   CreateAuthDto,
+  FilterUserDto,
   LoginAuthDto,
-  ToggleActiveDto,
   UpdateAuthDto,
 } from './dto';
 
@@ -25,8 +25,12 @@ describe('AuthController', () => {
       email: 'test@example.com',
       firstName: 'John',
       lastName: 'Doe',
-      role: 'ADMINISTRATOR',
+      role: Role.ADMINISTRATOR,
       isActive: true,
+      phoneNumber: '+1234567890',
+      address: '123 Test St',
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
     token: 'jwt_token',
   };
@@ -38,8 +42,12 @@ describe('AuthController', () => {
         email: 'test@example.com',
         firstName: 'John',
         lastName: 'Doe',
-        role: 'ADMINISTRATOR',
+        role: Role.ADMINISTRATOR,
         isActive: true,
+        phoneNumber: '+1234567890',
+        address: '123 Test St',
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
     ],
     meta: {
@@ -59,8 +67,12 @@ describe('AuthController', () => {
       email: 'test@example.com',
       firstName: 'John',
       lastName: 'Doe',
-      role: 'ADMINISTRATOR',
+      role: Role.ADMINISTRATOR,
       isActive: true,
+      phoneNumber: '+1234567890',
+      address: '123 Test St',
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
     message: 'User found successfully',
   };
@@ -71,8 +83,12 @@ describe('AuthController', () => {
       email: 'updated@example.com',
       firstName: 'John',
       lastName: 'Doe',
-      role: 'ADMINISTRATOR',
+      role: Role.ADMINISTRATOR,
       isActive: true,
+      phoneNumber: '+1234567890',
+      address: '123 Test St',
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
     message: 'User updated successfully',
   };
@@ -83,8 +99,12 @@ describe('AuthController', () => {
       email: 'test@example.com',
       firstName: 'John',
       lastName: 'Doe',
-      role: 'ADMINISTRATOR',
+      role: Role.ADMINISTRATOR,
       isActive: false,
+      phoneNumber: '+1234567890',
+      address: '123 Test St',
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
     message: 'User deactivated successfully',
   };
@@ -95,6 +115,9 @@ describe('AuthController', () => {
     password: 'password123',
     firstName: 'John',
     lastName: 'Doe',
+    role: Role.ADMINISTRATOR,
+    phoneNumber: '+1234567890',
+    address: '123 Test St',
   };
 
   const mockLoginDto: LoginAuthDto = {
@@ -102,17 +125,22 @@ describe('AuthController', () => {
     password: 'password123',
   };
 
-  const mockPaginationDto: PaginationDto = {
+  const mockFilterUserDto: FilterUserDto = {
     page: 1,
     limit: 10,
+    firstName: 'John',
+    lastName: 'Doe',
+    email: 'test@example.com',
+    role: Role.ADMINISTRATOR,
+    isActive: true,
   };
 
   const mockUpdateUserDto: UpdateAuthDto = {
     email: 'updated@example.com',
-  };
-
-  const mockToggleActiveDto: ToggleActiveDto = {
-    isActive: false,
+    firstName: 'John Updated',
+    lastName: 'Doe Updated',
+    phoneNumber: '+0987654321',
+    address: '456 Updated St',
   };
 
   beforeEach(async () => {
@@ -125,9 +153,15 @@ describe('AuthController', () => {
           useValue: {
             signup: jest.fn().mockResolvedValue(mockAuthResponse),
             login: jest.fn().mockResolvedValue(mockAuthResponse),
+            logout: jest
+              .fn()
+              .mockResolvedValue({ message: 'Successfully logged out' }),
+            logoutWithToken: jest
+              .fn()
+              .mockResolvedValue({ message: 'Successfully logged out' }),
             findAllUsers: jest.fn().mockResolvedValue(mockPaginatedUsers),
             findUserById: jest.fn().mockResolvedValue(mockUserResponse),
-            getUserRole: jest.fn().mockResolvedValue({ role: 'ADMINISTRATOR' }),
+            getUserRole: jest.fn().mockResolvedValue(Role.ADMINISTRATOR),
             updateUser: jest.fn().mockResolvedValue(mockUpdatedUserResponse),
             toggleUserActive: jest
               .fn()
@@ -137,9 +171,10 @@ describe('AuthController', () => {
         {
           provide: ToggleActiveService,
           useValue: {
-            toggleActive: jest
-              .fn()
-              .mockResolvedValue(mockDeactivatedUserResponse),
+            toggleActive: jest.fn().mockResolvedValue({
+              message: 'User deactivated successfully',
+              data: mockDeactivatedUserResponse.user,
+            }),
           },
         },
       ],
@@ -155,11 +190,15 @@ describe('AuthController', () => {
   });
 
   afterAll(async () => {
-    await module.close();
+    if (module) {
+      await module.close();
+    }
   });
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+    expect(authService).toBeDefined();
+    expect(toggleActiveService).toBeDefined();
   });
 
   describe('signup', () => {
@@ -167,6 +206,17 @@ describe('AuthController', () => {
       const result = await controller.signup(mockCreateUserDto);
       expect(authService.signup).toHaveBeenCalledWith(mockCreateUserDto);
       expect(result).toEqual(mockAuthResponse);
+    });
+
+    it('should register a new user without optional fields', async () => {
+      const basicUserDto = {
+        email: 'basic@example.com',
+        password: 'password123',
+        firstName: 'Basic',
+        lastName: 'User',
+      };
+      await controller.signup(basicUserDto);
+      expect(authService.signup).toHaveBeenCalledWith(basicUserDto);
     });
   });
 
@@ -178,10 +228,30 @@ describe('AuthController', () => {
     });
   });
 
+  describe('logout', () => {
+    it('should logout a user with token', async () => {
+      const authHeader = 'Bearer jwt_token';
+      const result = await controller.logout(authHeader);
+      expect(authService.logoutWithToken).toHaveBeenCalledWith('jwt_token');
+      expect(result).toEqual({ message: 'Successfully logged out' });
+    });
+
+    it('should handle logout without token', async () => {
+      const result = await controller.logout(undefined);
+      expect(result).toEqual({ message: 'Successfully logged out' });
+    });
+  });
+
   describe('findAllUsers', () => {
-    it('should return paginated users', async () => {
-      const result = await controller.findAllUsers(mockPaginationDto);
-      expect(authService.findAllUsers).toHaveBeenCalledWith(mockPaginationDto);
+    it('should return paginated users with filters', async () => {
+      const result = await controller.findAllUsers(mockFilterUserDto);
+      expect(authService.findAllUsers).toHaveBeenCalledWith(mockFilterUserDto);
+      expect(result).toEqual(mockPaginatedUsers);
+    });
+
+    it('should return paginated users without filters', async () => {
+      const result = await controller.findAllUsers({});
+      expect(authService.findAllUsers).toHaveBeenCalledWith({});
       expect(result).toEqual(mockPaginatedUsers);
     });
   });
@@ -191,15 +261,6 @@ describe('AuthController', () => {
       const result = await controller.findUserById('user-id-1');
       expect(authService.findUserById).toHaveBeenCalledWith('user-id-1');
       expect(result).toEqual(mockUserResponse);
-    });
-  });
-
-  describe('getUserRole', () => {
-    it('should return user role', async () => {
-      const mockRequest = { user: { id: 'user-id-1' } };
-      const result = await controller.getUserRole(mockRequest);
-      expect(authService.getUserRole).toHaveBeenCalledWith('user-id-1');
-      expect(result).toEqual({ role: 'ADMINISTRATOR' });
     });
   });
 
@@ -217,26 +278,50 @@ describe('AuthController', () => {
     });
   });
 
-  describe('toggleUserActive', () => {
-    it('should activate/deactivate a user', async () => {
+  describe('deactivateUser', () => {
+    it('should deactivate a user', async () => {
       const result = await controller.deactivateUser('user-id-1');
       expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
         'user',
         'user-id-1',
-        mockToggleActiveDto,
+        { isActive: false },
       );
-      expect(result).toEqual(mockDeactivatedUserResponse);
+      expect(result).toEqual({
+        message: 'User deactivated successfully',
+        data: mockDeactivatedUserResponse.user,
+      });
     });
   });
 
-  describe('adminOnly', () => {
-    it('should return success message for admin access', () => {
-      const mockRequest = { user: { id: 'user-id-1', role: 'ADMINISTRATOR' } };
-      const result = controller.adminOnly(mockRequest);
-      expect(result).toEqual({
-        message: 'Admin access successful',
-        user: mockRequest.user,
-      });
+  describe('activateUser', () => {
+    const mockActivatedUserResponse = {
+      message: 'User activated successfully',
+      data: {
+        ...mockDeactivatedUserResponse.user,
+        isActive: true,
+      },
+    };
+
+    it('should activate a user', async () => {
+      jest
+        .spyOn(toggleActiveService, 'toggleActive')
+        .mockResolvedValueOnce(mockActivatedUserResponse);
+      const result = await controller.activateUser('user-id-1');
+      expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
+        'user',
+        'user-id-1',
+        { isActive: true },
+      );
+      expect(result).toEqual(mockActivatedUserResponse);
+    });
+  });
+
+  describe('getUserRole', () => {
+    it('should return user role', async () => {
+      const mockRequest = { user: { id: 'user-id-1' } };
+      const result = await controller.getUserRole(mockRequest);
+      expect(authService.getUserRole).toHaveBeenCalledWith('user-id-1');
+      expect(result).toBe(Role.ADMINISTRATOR);
     });
   });
 });

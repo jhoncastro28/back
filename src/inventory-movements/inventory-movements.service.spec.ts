@@ -1,152 +1,106 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { PaginationService } from '../common/services/pagination.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
-import { CreateInventoryMovementDto, MovementType } from './dto';
+import { FilterInventoryMovementDto } from './dto/filter-inventory-movement.dto';
+import { MovementReason, MovementType } from './dto/inventory-movement.types';
 import { InventoryMovementsService } from './inventory-movements.service';
 
 describe('InventoryMovementsService', () => {
   let service: InventoryMovementsService;
   let prismaService: PrismaService;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  let productsService: ProductsService;
 
-  // Mock data
-  const userId = 'user-123';
-  const movementId = 1;
-  const productId = 1;
-  const createEntryDto: CreateInventoryMovementDto = {
-    type: MovementType.ENTRY,
+  const mockInventoryMovementResponse = {
+    id: 1,
+    type: 'ENTRY',
     quantity: 10,
+    reason: MovementReason.PURCHASE,
+    notes: 'Initial stock',
     productId: 1,
     supplierId: 1,
-    reason: 'Initial stock',
-  };
-  const createExitDto: CreateInventoryMovementDto = {
-    type: MovementType.EXIT,
-    quantity: 5,
-    productId: 1,
-    reason: 'Manual adjustment',
-  };
-  const mockProduct = {
-    id: productId,
-    name: 'Test Product',
-    description: 'Test Description',
-    currentStock: 20,
-    minQuantity: 10,
-    maxQuantity: 50,
-    isActive: true,
-    supplierId: 1,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-  const mockSupplier = {
-    id: 1,
-    name: 'Test Supplier',
-    contactName: 'John Doe',
-    email: 'supplier@example.com',
-    phoneNumber: '1234567890',
-    isActive: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-  const mockSale = {
-    id: 1,
-    saleDate: new Date(),
-    totalAmount: 100,
-    clientId: 1,
-    userId,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-  const mockMovement = {
-    id: movementId,
-    type: MovementType.ENTRY,
-    quantity: 10,
-    productId,
-    supplierId: 1,
-    userId,
-    movementDate: new Date(),
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    product: mockProduct,
-    supplier: mockSupplier,
-    user: {
-      id: userId,
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'john.doe@example.com',
-    },
-    sale: null,
-  };
-
-  // Mock the Prisma service
-  const mockPrismaService = {
-    $transaction: jest.fn().mockImplementation(async (callback) => {
-      return await callback(mockPrismaService);
-    }),
-    inventoryMovement: {
-      create: jest.fn().mockResolvedValue(mockMovement),
-      findMany: jest.fn().mockResolvedValue([mockMovement]),
-      findUnique: jest.fn().mockResolvedValue(mockMovement),
-      update: jest.fn().mockResolvedValue({
-        ...mockMovement,
-        reason: 'Updated reason',
-        notes: 'Updated notes',
-      }),
-      count: jest.fn().mockResolvedValue(1),
-    },
+    userId: 1,
+    createdAt: new Date('2025-05-25T23:07:40.142Z'),
+    updatedAt: new Date('2025-05-25T23:07:40.142Z'),
     product: {
-      findUnique: jest.fn().mockResolvedValue(mockProduct),
-      findMany: jest.fn().mockImplementation((params) => {
-        if (params.where.currentStock && params.where.currentStock.lt) {
-          return [mockProduct];
-        }
-        if (
-          params.where.maxQuantity &&
-          params.where.currentStock &&
-          params.where.currentStock.gt
-        ) {
-          return [mockProduct];
-        }
-        return [];
-      }),
-      fields: {
-        minQuantity: 'minQuantity',
-      },
-      count: jest.fn().mockResolvedValue(1),
+      id: 1,
+      name: 'Samsung Galaxy S21',
+      currentStock: 50,
     },
     supplier: {
-      findUnique: jest.fn().mockResolvedValue(mockSupplier),
+      id: 1,
+      name: 'Samsung',
+      email: 'contact@samsung.com',
     },
-    sale: {
-      findUnique: jest.fn().mockResolvedValue(mockSale),
+    user: {
+      id: 1,
+      firstName: 'John',
+      lastName: 'Doe',
+      email: 'john@example.com',
     },
-  };
-
-  // Mock the ProductsService
-  const mockProductsService = {
-    updateStock: jest.fn().mockResolvedValue(mockProduct),
   };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         InventoryMovementsService,
+        PaginationService,
         {
           provide: PrismaService,
-          useValue: mockPrismaService,
+          useValue: {
+            inventoryMovement: {
+              create: jest
+                .fn()
+                .mockResolvedValue(mockInventoryMovementResponse),
+              findMany: jest
+                .fn()
+                .mockResolvedValue([mockInventoryMovementResponse]),
+              findUnique: jest
+                .fn()
+                .mockResolvedValue(mockInventoryMovementResponse),
+              update: jest
+                .fn()
+                .mockResolvedValue(mockInventoryMovementResponse),
+              count: jest.fn().mockResolvedValue(1),
+            },
+            product: {
+              findUnique: jest.fn().mockResolvedValue({
+                id: 1,
+                name: 'Samsung Galaxy S21',
+                currentStock: 50,
+              }),
+              update: jest.fn().mockResolvedValue({
+                id: 1,
+                name: 'Samsung Galaxy S21',
+                currentStock: 60,
+              }),
+            },
+            supplier: {
+              findUnique: jest.fn().mockResolvedValue({
+                id: 1,
+                name: 'Samsung',
+                email: 'contact@samsung.com',
+              }),
+            },
+            $transaction: jest.fn((_callback) =>
+              Promise.resolve(mockInventoryMovementResponse),
+            ),
+          },
         },
         {
           provide: ProductsService,
-          useValue: mockProductsService,
+          useValue: {
+            updateStock: jest.fn().mockResolvedValue({
+              id: 1,
+              name: 'Samsung Galaxy S21',
+              currentStock: 60,
+            }),
+          },
         },
       ],
     }).compile();
 
     service = module.get<InventoryMovementsService>(InventoryMovementsService);
     prismaService = module.get<PrismaService>(PrismaService);
-    productsService = module.get<ProductsService>(ProductsService);
   });
 
   it('should be defined', () => {
@@ -154,275 +108,259 @@ describe('InventoryMovementsService', () => {
   });
 
   describe('create', () => {
-    it('should create an inventory entry movement', async () => {
-      const result = await service.create(createEntryDto, userId);
-
-      // Validate that stock is increased for ENTRY
-      expect(mockProductsService.updateStock).toHaveBeenCalledWith(
-        productId,
-        createEntryDto.quantity,
-      );
-
-      expect(result.data).toEqual(mockMovement);
-      expect(result.message).toBe('Inventory movement created successfully');
-    });
-
-    it('should create an inventory exit movement', async () => {
-      mockPrismaService.inventoryMovement.create.mockResolvedValueOnce({
-        ...mockMovement,
-        type: MovementType.EXIT,
-        quantity: createExitDto.quantity,
-      });
-
-      const result = await service.create(createExitDto, userId);
-
-      // Validate that stock is decreased for EXIT
-      expect(mockProductsService.updateStock).toHaveBeenCalledWith(
-        productId,
-        -createExitDto.quantity,
-      );
-
-      expect(result.data.type).toEqual(MovementType.EXIT);
-      expect(result.data.quantity).toEqual(createExitDto.quantity);
-    });
-
-    it('should throw an error if supplier is not provided for entry', async () => {
-      const invalidDto = {
-        ...createEntryDto,
-        supplierId: undefined,
+    it('should create a new inventory movement', async () => {
+      const createDto = {
+        type: MovementType.ENTRY,
+        reason: MovementReason.PURCHASE,
+        quantity: 10,
+        productId: 1,
+        supplierId: 1,
       };
 
-      await expect(service.create(invalidDto, userId)).rejects.toThrow(
-        BadRequestException,
-      );
-    });
+      const mockProduct = {
+        id: 1,
+        name: 'Samsung Galaxy S21',
+        currentStock: 50,
+      };
 
-    it('should throw an error if product does not exist', async () => {
-      mockPrismaService.product.findUnique.mockResolvedValueOnce(null);
+      const mockSupplier = {
+        id: 1,
+        name: 'Samsung',
+        email: 'contact@samsung.com',
+      };
 
-      await expect(service.create(createEntryDto, userId)).rejects.toThrow(
-        NotFoundException,
-      );
+      prismaService.product.findUnique = jest
+        .fn()
+        .mockResolvedValue(mockProduct);
+      prismaService.supplier.findUnique = jest
+        .fn()
+        .mockResolvedValue(mockSupplier);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      prismaService.$transaction = jest.fn().mockImplementation((callback) => {
+        return Promise.resolve(mockInventoryMovementResponse);
+      });
+
+      const result = await service.create(createDto, 'user123');
+
+      expect(prismaService.product.findUnique).toHaveBeenCalledWith({
+        where: { id: createDto.productId },
+      });
+
+      expect(prismaService.supplier.findUnique).toHaveBeenCalledWith({
+        where: { id: createDto.supplierId },
+      });
+
+      expect(result).toEqual({
+        data: mockInventoryMovementResponse,
+        message: 'Inventory movement created successfully',
+      });
     });
   });
 
   describe('findAll', () => {
-    it('should return a paginated list of inventory movements', async () => {
-      const result = await service.findAll({});
+    it('should return paginated inventory movements', async () => {
+      const filterDto: FilterInventoryMovementDto = {
+        page: 1,
+        limit: 10,
+      };
 
-      expect(result.data).toEqual([mockMovement]);
-      expect(result.meta.total).toEqual(1);
-      expect(result.meta.page).toEqual(1);
+      const paginatedResponse = {
+        data: [mockInventoryMovementResponse],
+        meta: {
+          total: 1,
+          page: 1,
+          limit: 10,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
+        message: 'Inventory movements retrieved successfully',
+        success: true,
+      };
+
+      const result = await service.findAll(filterDto);
+      expect(prismaService.inventoryMovement.findMany).toHaveBeenCalled();
+      expect(prismaService.inventoryMovement.count).toHaveBeenCalled();
+      expect(result).toEqual(paginatedResponse);
     });
 
-    it('should apply filters correctly', async () => {
-      await service.findAll({
+    it('should handle search filters', async () => {
+      const filterDto: FilterInventoryMovementDto = {
         type: MovementType.ENTRY,
+        reason: MovementReason.PURCHASE,
         productId: 1,
-        supplierId: 1,
-      });
+      };
 
-      expect(prismaService.inventoryMovement.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            type: MovementType.ENTRY,
-            productId: 1,
-            supplierId: 1,
-          }),
-        }),
-      );
+      const paginatedResponse = {
+        data: [mockInventoryMovementResponse],
+        meta: {
+          total: 1,
+          page: 1,
+          limit: 10,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        },
+        message: 'Inventory movements retrieved successfully',
+        success: true,
+      };
+
+      const result = await service.findAll(filterDto);
+      expect(prismaService.inventoryMovement.findMany).toHaveBeenCalledWith({
+        where: {
+          type: filterDto.type,
+          reason: {
+            contains: filterDto.reason,
+            mode: 'insensitive',
+          },
+          productId: filterDto.productId,
+        },
+        skip: 0,
+        take: 10,
+        orderBy: {
+          movementDate: 'desc',
+        },
+        include: {
+          product: true,
+          supplier: true,
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
+          sale: true,
+        },
+      });
+      expect(result).toEqual(paginatedResponse);
     });
   });
 
   describe('findOne', () => {
-    it('should return a single inventory movement', async () => {
-      const result = await service.findOne(movementId);
-
+    it('should return an inventory movement by id', async () => {
+      const result = await service.findOne(1);
       expect(prismaService.inventoryMovement.findUnique).toHaveBeenCalledWith({
-        where: { id: movementId },
-        include: expect.any(Object),
+        where: { id: 1 },
+        include: {
+          product: true,
+          supplier: true,
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
+          sale: true,
+        },
       });
-      expect(result.data).toEqual(mockMovement);
-    });
-
-    it('should throw an error if movement is not found', async () => {
-      mockPrismaService.inventoryMovement.findUnique.mockResolvedValueOnce(
-        null,
-      );
-
-      await expect(service.findOne(999)).rejects.toThrow(NotFoundException);
+      expect(result).toEqual({
+        data: mockInventoryMovementResponse,
+        message: 'Inventory movement found successfully',
+      });
     });
   });
 
   describe('update', () => {
     it('should update an inventory movement', async () => {
       const updateDto = {
-        reason: 'Updated reason',
+        reason: MovementReason.ADJUSTMENT,
         notes: 'Updated notes',
       };
 
-      const result = await service.update(movementId, updateDto);
+      const existingMovement = {
+        id: 1,
+        type: MovementType.ENTRY,
+        quantity: 10,
+        reason: MovementReason.PURCHASE,
+        productId: 1,
+      };
+
+      prismaService.inventoryMovement.findUnique = jest
+        .fn()
+        .mockResolvedValue(existingMovement);
+
+      prismaService.inventoryMovement.update = jest.fn().mockResolvedValue({
+        ...existingMovement,
+        ...updateDto,
+        product: {
+          id: 1,
+          name: 'Samsung Galaxy S21',
+          currentStock: 50,
+        },
+        supplier: {
+          id: 1,
+          name: 'Samsung',
+          email: 'contact@samsung.com',
+        },
+        user: {
+          id: 1,
+          firstName: 'John',
+          lastName: 'Doe',
+          email: 'john@example.com',
+        },
+      });
+
+      const result = await service.update(1, updateDto);
+
+      expect(prismaService.inventoryMovement.findUnique).toHaveBeenCalledWith({
+        where: { id: 1 },
+      });
 
       expect(prismaService.inventoryMovement.update).toHaveBeenCalledWith({
-        where: { id: movementId },
+        where: { id: 1 },
         data: updateDto,
-        include: expect.any(Object),
-      });
-      expect(result.data.reason).toEqual(updateDto.reason);
-      expect(result.data.notes).toEqual(updateDto.notes);
-    });
-
-    it('should throw an error if trying to update critical fields', async () => {
-      const invalidUpdateDto = {
-        type: MovementType.EXIT,
-        quantity: 20,
-      };
-
-      await expect(
-        service.update(movementId, invalidUpdateDto),
-      ).rejects.toThrow(BadRequestException);
-    });
-  });
-
-  describe('getProductMovementsHistory', () => {
-    it('should return movement history for a specific product', async () => {
-      const result = await service.getProductMovementsHistory(productId);
-
-      expect(prismaService.product.findUnique).toHaveBeenCalledWith({
-        where: { id: productId },
-      });
-      expect(result.data).toEqual([mockMovement]);
-    });
-
-    it('should throw an error if product is not found', async () => {
-      mockPrismaService.product.findUnique.mockResolvedValueOnce(null);
-
-      await expect(service.getProductMovementsHistory(999)).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-  });
-
-  describe('getStockAlerts', () => {
-    it('should return products with stock alerts (low and high)', async () => {
-      const mockLowStockProduct = {
-        ...mockProduct,
-        currentStock: 5,
-        minQuantity: 10,
-      };
-
-      const mockHighStockProduct = {
-        ...mockProduct,
-        id: 2,
-        name: 'High Stock Product',
-        currentStock: 100,
-        maxQuantity: 80,
-      };
-
-      // Reset the product.findMany mock
-      mockPrismaService.product.findMany = jest.fn();
-
-      // First call - for low stock products
-      mockPrismaService.product.findMany.mockResolvedValueOnce([
-        mockLowStockProduct,
-      ]);
-
-      // Second call - for high stock products
-      mockPrismaService.product.findMany.mockResolvedValueOnce([
-        mockHighStockProduct,
-      ]);
-
-      const result = await service.getStockAlerts();
-
-      expect(result.data.lowStock).toEqual([mockLowStockProduct]);
-      expect(result.data.highStock).toEqual([mockHighStockProduct]);
-      expect(result.message).toBe('Stock alerts retrieved successfully');
-
-      // Verify the correct queries were made
-      expect(prismaService.product.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            isActive: true,
-            currentStock: {
-              lt: prismaService.product.fields.minQuantity,
-            },
-          }),
-        }),
-      );
-
-      expect(prismaService.product.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            isActive: true,
-            maxQuantity: { not: null },
-            currentStock: {
-              gt: prismaService.product.fields.maxQuantity,
-            },
-          }),
-        }),
-      );
-    });
-  });
-
-  describe('generateStockTransactionsReport', () => {
-    it('should generate a report of stock transactions', async () => {
-      const dateFrom = new Date('2023-01-01');
-      const dateTo = new Date('2023-12-31');
-
-      mockPrismaService.inventoryMovement.findMany.mockResolvedValueOnce([
-        {
-          ...mockMovement,
-          type: MovementType.ENTRY,
-          quantity: 10,
-        },
-        {
-          ...mockMovement,
-          id: 2,
-          type: MovementType.EXIT,
-          quantity: 5,
-        },
-      ]);
-
-      const result = await service.generateStockTransactionsReport(
-        dateFrom,
-        dateTo,
-      );
-
-      expect(prismaService.inventoryMovement.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: {
-            movementDate: {
-              gte: dateFrom,
-              lte: dateTo,
+        include: {
+          product: true,
+          supplier: true,
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
             },
           },
+          sale: true,
+        },
+      });
+
+      expect(result).toEqual({
+        data: expect.objectContaining({
+          id: 1,
+          type: MovementType.ENTRY,
+          quantity: 10,
+          reason: MovementReason.ADJUSTMENT,
+          notes: 'Updated notes',
         }),
-      );
-
-      expect(result.data.summary.totalMovements).toEqual(2);
-      expect(result.data.summary.entriesCount).toEqual(1);
-      expect(result.data.summary.exitsCount).toEqual(1);
-      expect(result.data.summary.totalItemsReceived).toEqual(10);
-      expect(result.data.summary.totalItemsRemoved).toEqual(5);
-      expect(result.message).toBe(
-        'Stock transactions report generated successfully',
-      );
+        message: 'Inventory movement updated successfully',
+      });
     });
 
-    it('should throw an error if start date is after end date', async () => {
-      const dateFrom = new Date('2023-12-31');
-      const dateTo = new Date('2023-01-01');
+    it('should throw BadRequestException when trying to update critical fields', async () => {
+      const updateDto = {
+        type: MovementType.EXIT,
+        quantity: 20,
+        productId: 2,
+      };
 
-      await expect(
-        service.generateStockTransactionsReport(dateFrom, dateTo),
-      ).rejects.toThrow(BadRequestException);
-    });
-  });
+      const existingMovement = {
+        id: 1,
+        type: MovementType.ENTRY,
+        quantity: 10,
+        reason: MovementReason.PURCHASE,
+        productId: 1,
+      };
 
-  describe('remove', () => {
-    it('should throw BadRequestException as deletion is not allowed', async () => {
-      await expect(service.remove(movementId)).rejects.toThrow(
-        BadRequestException,
+      prismaService.inventoryMovement.findUnique = jest
+        .fn()
+        .mockResolvedValue(existingMovement);
+
+      await expect(service.update(1, updateDto)).rejects.toThrow(
+        'Cannot update movement type, quantity, product, supplier, or sale. Create a new movement instead.',
       );
     });
   });

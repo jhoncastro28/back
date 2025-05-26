@@ -1,22 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ToggleActiveService } from '../common/services/toggle-active.service';
-import { CreateSupplierDto } from './dto';
+import { DocumentType } from '../clients/entities/client.entity';
 import { SuppliersController } from './suppliers.controller';
 import { SuppliersService } from './suppliers.service';
 
 describe('SuppliersController', () => {
   let controller: SuppliersController;
   let service: SuppliersService;
-  let toggleActiveService: ToggleActiveService;
 
   const mockSuppliersService = {
     create: jest.fn(),
     findAll: jest.fn(),
     findOne: jest.fn(),
     update: jest.fn(),
-  };
-
-  const mockToggleActiveService = {
     toggleActive: jest.fn(),
   };
 
@@ -28,37 +23,43 @@ describe('SuppliersController', () => {
           provide: SuppliersService,
           useValue: mockSuppliersService,
         },
-        {
-          provide: ToggleActiveService,
-          useValue: mockToggleActiveService,
-        },
       ],
     }).compile();
 
     controller = module.get<SuppliersController>(SuppliersController);
     service = module.get<SuppliersService>(SuppliersService);
-    toggleActiveService = module.get<ToggleActiveService>(ToggleActiveService);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
   });
 
-  describe('create', () => {
-    it('should create a supplier', async () => {
-      const createSupplierDto: CreateSupplierDto = {
-        name: 'Test Supplier',
-        email: 'supplier@test.com',
-        phoneNumber: '1234567890',
-        address: 'Test Address',
-      };
+  describe('createSupplier', () => {
+    const createSupplierDto = {
+      name: 'Test Supplier',
+      email: 'test@supplier.com',
+      phoneNumber: '1234567890',
+      address: 'Test Address',
+      documentType: DocumentType.CC,
+      documentNumber: '12345678901',
+      contactName: 'John Doe',
+    };
 
+    it('should create a supplier successfully', async () => {
       const expectedResult = {
-        id: 1,
-        ...createSupplierDto,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        success: true,
+        message: 'Supplier created successfully',
+        data: {
+          id: 1,
+          ...createSupplierDto,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
       };
 
       mockSuppliersService.create.mockResolvedValue(expectedResult);
@@ -70,51 +71,135 @@ describe('SuppliersController', () => {
     });
   });
 
-  describe('deactivateSupplier', () => {
-    it('should deactivate a supplier', async () => {
-      const supplierId = 1;
+  describe('getSuppliers', () => {
+    const query = {
+      page: 1,
+      limit: 10,
+      isActive: true,
+      search: 'test',
+    };
+
+    it('should return paginated suppliers list', async () => {
       const expectedResult = {
-        message: 'supplier deactivated successfully',
+        data: [
+          {
+            id: 1,
+            name: 'Test Supplier',
+            isActive: true,
+          },
+        ],
+        meta: {
+          total: 1,
+          page: 1,
+          limit: 10,
+        },
+      };
+
+      mockSuppliersService.findAll.mockResolvedValue(expectedResult);
+
+      const result = await controller.getSuppliers(query);
+
+      expect(result).toEqual(expectedResult);
+      expect(service.findAll).toHaveBeenCalledWith(query);
+    });
+  });
+
+  describe('getSupplierById', () => {
+    const supplierId = 1;
+
+    it('should return a supplier by id', async () => {
+      const expectedResult = {
+        success: true,
+        data: {
+          id: supplierId,
+          name: 'Test Supplier',
+          isActive: true,
+        },
+      };
+
+      mockSuppliersService.findOne.mockResolvedValue(expectedResult);
+
+      const result = await controller.getSupplierById(supplierId);
+
+      expect(result).toEqual(expectedResult);
+      expect(service.findOne).toHaveBeenCalledWith(supplierId);
+    });
+  });
+
+  describe('updateSupplier', () => {
+    const supplierId = 1;
+    const updateSupplierDto = {
+      name: 'Updated Supplier',
+      email: 'updated@supplier.com',
+    };
+
+    it('should update a supplier successfully', async () => {
+      const expectedResult = {
+        success: true,
+        message: 'Supplier updated successfully',
+        data: {
+          id: supplierId,
+          ...updateSupplierDto,
+          isActive: true,
+        },
+      };
+
+      mockSuppliersService.update.mockResolvedValue(expectedResult);
+
+      const result = await controller.updateSupplier(
+        supplierId,
+        updateSupplierDto,
+      );
+
+      expect(result).toEqual(expectedResult);
+      expect(service.update).toHaveBeenCalledWith(
+        supplierId,
+        updateSupplierDto,
+      );
+    });
+  });
+
+  describe('deactivateSupplier', () => {
+    const supplierId = 1;
+
+    it('should deactivate a supplier successfully', async () => {
+      const expectedResult = {
+        success: true,
+        message: 'Supplier deactivated successfully',
         data: {
           id: supplierId,
           isActive: false,
         },
       };
 
-      mockToggleActiveService.toggleActive.mockResolvedValue(expectedResult);
+      mockSuppliersService.toggleActive.mockResolvedValue(expectedResult);
 
       const result = await controller.deactivateSupplier(supplierId);
 
       expect(result).toEqual(expectedResult);
-      expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
-        'supplier',
-        supplierId,
-        { isActive: false },
-      );
+      expect(service.toggleActive).toHaveBeenCalledWith(supplierId, false);
     });
   });
 
   describe('activateSupplier', () => {
-    it('should activate a supplier', async () => {
-      const supplierId = 1;
+    const supplierId = 1;
+
+    it('should activate a supplier successfully', async () => {
       const expectedResult = {
-        message: 'supplier activated successfully',
+        success: true,
+        message: 'Supplier activated successfully',
         data: {
           id: supplierId,
           isActive: true,
         },
       };
 
-      mockToggleActiveService.toggleActive.mockResolvedValue(expectedResult);
+      mockSuppliersService.toggleActive.mockResolvedValue(expectedResult);
 
       const result = await controller.activateSupplier(supplierId);
 
       expect(result).toEqual(expectedResult);
-      expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
-        'supplier',
-        supplierId,
-        { isActive: true },
-      );
+      expect(service.toggleActive).toHaveBeenCalledWith(supplierId, true);
     });
   });
 });

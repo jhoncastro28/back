@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiOperation,
   ApiParam,
   ApiQuery,
@@ -27,6 +28,7 @@ import { PricesService } from './prices.service';
 @ApiTags('Prices')
 @Controller('prices')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@ApiBearerAuth()
 export class PricesController {
   constructor(
     private readonly pricesService: PricesService,

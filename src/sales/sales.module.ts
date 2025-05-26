@@ -1,17 +1,20 @@
 import { Module } from '@nestjs/common';
 import { CommonModule } from '../common/common.module';
 import { PrismaModule } from '../prisma/prisma.module';
-import { SaleDetailsController } from './sale-details.controller';
-import { SaleDetailsService } from './sale-details.service';
-import { SalesReportController } from './sales-report.controller';
-import { SalesReportService } from './sales-report.service';
-import { SalesController } from './sales.controller';
-import { SalesService } from './sales.service';
+import { SalesController } from './core/sales.controller';
+import { SalesService } from './core/sales.service';
+import { SaleDetailsController } from './details/sale-details.controller';
+import { SaleDetailsService } from './details/sale-details.service';
+import { SalesReportModule } from './reports/sales-report.module';
 
+/**
+ * Module for managing sales operations and reporting
+ * Includes core sales functionality, details management, and reporting
+ */
 @Module({
-  imports: [PrismaModule, CommonModule],
-  controllers: [SalesController, SaleDetailsController, SalesReportController],
-  providers: [SalesService, SaleDetailsService, SalesReportService],
-  exports: [SalesService, SaleDetailsService, SalesReportService],
+  imports: [PrismaModule, CommonModule, SalesReportModule],
+  controllers: [SalesController, SaleDetailsController],
+  providers: [SalesService, SaleDetailsService],
+  exports: [SalesService],
 })
 export class SalesModule {}

@@ -1,8 +1,8 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { Request } from 'express';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { envs } from '../../config/envs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthService } from '../auth.service';
 
@@ -13,11 +13,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     private prismaService: PrismaService,
     private authService: AuthService,
+    private configService: ConfigService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: envs.jwt.secret,
+      secretOrKey: configService.get('JWT_SECRET'),
       passReqToCallback: true,
     });
   }
@@ -34,24 +35,22 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         `Extracted Token: ${token ? token.substring(0, 20) + '...' : 'No token'}`,
       );
 
-      // Check token invalidation
-      const isUserInvalidated = this.authService.isTokenInvalidated(
-        payload.sub,
-      );
+      if (!token) {
+        this.logger.error('No token provided');
+        throw new UnauthorizedException('No token provided');
+      }
+
       const isTokenInvalidated = this.authService.isTokenInvalidated(token);
 
-      this.logger.debug(
-        `Token invalidated checks - User: ${isUserInvalidated}, Token: ${isTokenInvalidated}`,
-      );
+      this.logger.debug(`Token invalidated check: ${isTokenInvalidated}`);
 
-      if (isUserInvalidated || isTokenInvalidated) {
+      if (isTokenInvalidated) {
         this.logger.error('Token is invalidated');
         throw new UnauthorizedException(
           'The session has expired or been logged out',
         );
       }
 
-      // Check if this is a client token
       if (payload.type === 'client') {
         this.logger.debug(`Processing CLIENT token for ID: ${payload.sub}`);
 
@@ -92,7 +91,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         return clientUser;
       }
 
-      // Logic for regular users (administrators, salespersons)
       this.logger.debug(`Processing USER token for ID: ${payload.sub}`);
 
       const user = await this.prismaService.user.findUnique({
@@ -127,12 +125,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       this.logger.error(`Error message: ${error.message}`);
       this.logger.error(`Error stack: ${error.stack}`);
 
-      // If it's already an UnauthorizedException, re-throw it
       if (error instanceof UnauthorizedException) {
         throw error;
       }
 
-      // For any other error, throw a generic authentication failed message
       throw new UnauthorizedException('Authentication failed');
     }
   }

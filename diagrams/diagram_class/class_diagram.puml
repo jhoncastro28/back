@@ -1,0 +1,142 @@
+@startuml "Diagrama de Clases"
+title Diagrama de Clases
+
+package "src" {
+
+    package clients {
+        class ClientService
+        class ClientRepository
+        class Client {
+            - id : Integer
+            - name : String
+            - email : String  
+            - phoneNumber : String
+            - address : String
+            - documentType : String
+            - documentNumber : String
+            - isActive : Boolean
+            - createdAt : Timestamp
+            - updatedAt : Timestamp
+        }
+        class ClientDto
+    }
+
+    package sellers {
+        class SellerService
+        class SellerRepository
+        class Seller {
+            - id : Integer
+            - firstName : String
+            - lastName : String
+            - email : String
+            - phoneNumber : String
+            - documentNumber : String
+            - isActive : Boolean
+            - hireDate : Timestamp
+            - commissionRate : Numeric
+            - createdAt : Timestamp
+            - updatedAt : Timestamp
+        }
+        class SellerDto
+    }
+
+    package "inventory-reports" {
+        class ReportService
+        class StockReportGenerator
+        class SalesReportGenerator
+    }
+
+    package products {
+        class ProductService
+        class ProductRepository
+        class Product {
+            - id : Integer
+            - name : String
+            - description : String
+            - minQuantity : Integer
+            - maxQuantity : Integer
+            - currentStock : Integer
+            - isActive : Boolean
+            - supplierId : Integer
+        }
+        class ProductDto
+    }
+
+    package sales {
+        class SaleService
+        class SaleRepository
+        class Sale {
+            - id : Integer
+            - saleDate : Timestamp
+            - totalAmount : Numeric
+            - notes : String
+            - clientId : Integer
+            - sellerId : Integer
+        }
+        class SaleDetailService
+        class SaleDetailRepository
+        class SaleDetail {
+            - id : Integer
+            - quantity : Integer
+            - unitPrice : Numeric
+            - discountAmount : Numeric
+            - subtotal : Numeric
+            - productId : Integer
+            - saleId : Integer
+        }
+        class SaleDto
+        class SaleDetailDto
+    }
+
+    package suppliers {
+        class SupplierService
+        class SupplierRepository
+        class Supplier {
+            - id : Integer
+            - name : String
+            - contactName : String
+            - email : String
+            - phoneNumber : String
+            - address : String
+            - documentType : String
+            - documentNumber : String
+            - isActive : Boolean
+        }
+        class SupplierDto
+    }
+}
+
+' Dependencies within packages
+ClientService ..> ClientRepository
+ClientRepository ..> Client
+ClientService ..> ClientDto
+
+ProductService ..> ProductRepository
+ProductRepository ..> Product
+ProductService ..> ProductDto
+
+SaleService ..> SaleRepository
+SaleService ..> SaleDetailService
+SaleRepository ..> Sale
+SaleDetailService ..> SaleDetailRepository
+SaleDetailRepository ..> SaleDetail
+SaleService ..> SaleDto
+SaleDetailService ..> SaleDetailDto
+
+SupplierService ..> SupplierRepository
+SupplierRepository ..> Supplier
+SupplierService ..> SupplierDto
+
+SellerService ..> SellerRepository
+SellerRepository ..> Seller
+SellerService ..> SellerDto
+
+' Cross-package dependencies
+SaleService ..> ClientService
+SaleService ..> ProductService
+SaleService ..> SellerService
+ReportService ..> ProductService
+ReportService ..> SaleService
+ProductService ..> SupplierService
+
+@enduml

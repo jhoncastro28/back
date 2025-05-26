@@ -4,15 +4,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { PaginatedResult } from '../common/interfaces';
+import { PaginatedResponse } from '../common/interfaces/pagination.interface';
+import { PaginationService } from '../common/services/pagination.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateClientDto,
   FilterClientDto,
+  LoginClientDto,
   ToggleActiveDto,
   UpdateClientDto,
-  LoginClientDto,
 } from './dto';
+import { PurchaseHistoryResponse } from './interfaces/purchase-history.interface';
 
 /**
  * Client Service
@@ -25,8 +27,15 @@ export class ClientsService {
   constructor(
     private readonly prismaService: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly paginationService: PaginationService,
   ) {}
 
+  /**
+   * Authenticates a client using document credentials
+   * @param loginClientDto - The client's document credentials
+   * @returns Authentication token and client information
+   * @throws NotFoundException when client is not found or inactive
+   */
   async loginWithDocument(loginClientDto: LoginClientDto) {
     const { documentType, documentNumber } = loginClientDto;
 
@@ -45,7 +54,6 @@ export class ClientsService {
       );
     }
 
-    // Generate a JWT token using the configured JwtService
     const token = this.jwtService.sign({
       sub: client.id,
       type: 'client',
@@ -74,162 +82,16 @@ export class ClientsService {
   /**
    * Get orders for a specific client
    */
-  async getClientOrders(clientId: number) {
-    try {
-      const client = await this.prismaService.client.findUnique({
-        where: { id: clientId },
-      });
-
-      if (!client || !client.isActive) {
-        throw new NotFoundException(
-          `Client with ID ${clientId} not found or inactive`,
-        );
-      }
-
-      // Get all sales for this client
-      const sales = await this.prismaService.sale.findMany({
-        where: {
-          clientId: clientId,
-        },
-        include: {
-          saleDetails: {
-            include: {
-              product: {
-                select: {
-                  id: true,
-                  name: true,
-                  description: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: {
-          saleDate: 'desc',
-        },
-      });
-
-      // Transform sales to match the expected order format
-      const orders = sales.map((sale) => ({
-        id: sale.id.toString(),
-        orderNumber: `ORD-${sale.id.toString().padStart(6, '0')}`,
-        date: sale.saleDate.toISOString(),
-        status: 'completed' as const,
-        items: sale.saleDetails.map((detail) => ({
-          id: detail.id.toString(),
-          name: detail.product.name,
-          quantity: detail.quantity,
-          price: Number(detail.unitPrice),
-        })),
-        subtotal: Number(sale.totalAmount),
-        tax: 0,
-        shipping: 0,
-        total: Number(sale.totalAmount),
-        address: client.address || 'No address provided',
-        paymentMethod: 'Cash',
-      }));
-
-      return {
-        data: orders,
-        message: 'Orders retrieved successfully',
-      };
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new BadRequestException(
-        'Error retrieving client orders: ' + error.message,
-      );
-    }
-  }
+  // Mobile client methods have been moved to src/clients/mobile/mobile.service.ts
 
   /**
-   * Get specific order details for a client
-   */
-  async getClientOrderDetails(clientId: number, orderId: number) {
-    try {
-      const client = await this.prismaService.client.findUnique({
-        where: { id: clientId },
-      });
-
-      if (!client || !client.isActive) {
-        throw new NotFoundException(
-          `Client with ID ${clientId} not found or inactive`,
-        );
-      }
-
-      // Get specific sale for this client
-      const sale = await this.prismaService.sale.findFirst({
-        where: {
-          id: orderId,
-          clientId: clientId,
-        },
-        include: {
-          saleDetails: {
-            include: {
-              product: {
-                select: {
-                  id: true,
-                  name: true,
-                  description: true,
-                },
-              },
-            },
-          },
-        },
-      });
-
-      if (!sale) {
-        throw new NotFoundException(
-          `Order with ID ${orderId} not found or does not belong to this client`,
-        );
-      }
-
-      // Transform to order detail format
-      const orderDetail = {
-        id: sale.id.toString(),
-        orderNumber: `ORD-${sale.id.toString().padStart(6, '0')}`,
-        date: sale.saleDate.toISOString(),
-        status: 'completed',
-        items: sale.saleDetails.map((detail) => ({
-          id: detail.id.toString(),
-          name: detail.product.name,
-          quantity: detail.quantity,
-          price: Number(detail.unitPrice),
-        })),
-        subtotal: Number(sale.totalAmount),
-        tax: 0,
-        shipping: 0,
-        discount: 0,
-        total: Number(sale.totalAmount),
-        address: client.address || 'No address provided',
-        paymentMethod: 'Cash',
-        store: 'Almendros',
-      };
-
-      return {
-        data: orderDetail,
-        message: 'Order details retrieved successfully',
-      };
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new BadRequestException(
-        'Error retrieving order details: ' + error.message,
-      );
-    }
-  }
-
-  /**
-   * Create a new client
-   *
+   * Creates a new client in the system
    * @param createClientDto - Data for creating a new client
    * @returns Newly created client with success message
+   * @throws BadRequestException if client creation fails
    */
   async create(createClientDto: CreateClientDto) {
     try {
-      // Create new client
       const newClient = await this.prismaService.client.create({
         data: createClientDto,
       });
@@ -244,30 +106,28 @@ export class ClientsService {
   }
 
   /**
-   * Retrieve all clients with pagination and filtering
-   *
+   * Retrieves all clients with pagination and filtering options
    * @param filterClientDto - Pagination and filter parameters
    * @returns Paginated list of clients
+   * @throws BadRequestException if retrieval fails
    */
   async findAll(
     filterClientDto: FilterClientDto,
-  ): Promise<PaginatedResult<any>> {
+  ): Promise<PaginatedResponse<any>> {
     const {
       page = 1,
       limit = 10,
       name,
       email,
       phoneNumber,
-      identificationNumber,
+      documentNumber,
       isActive = true,
       hasPurchased,
     } = filterClientDto;
 
-    // Calculate skip value for pagination
-    const skip = (page - 1) * limit;
+    const skip = this.paginationService.getPaginationSkip(page, limit);
 
     try {
-      // Build where clause with filters
       const where: any = {
         isActive,
       };
@@ -290,11 +150,10 @@ export class ClientsService {
         };
       }
 
-      if (identificationNumber) {
-        where.documentNumber = identificationNumber;
+      if (documentNumber) {
+        where.documentNumber = documentNumber;
       }
 
-      // If hasPurchased filter is used, we need to include a relation check
       let include = undefined;
       if (hasPurchased !== undefined) {
         include = {
@@ -307,18 +166,19 @@ export class ClientsService {
         };
       }
 
-      // Get clients with pagination
-      const clients = await this.prismaService.client.findMany({
-        skip,
-        take: limit,
-        where,
-        orderBy: {
-          createdAt: 'desc',
-        },
-        include,
-      });
+      const [clients, total] = await Promise.all([
+        this.prismaService.client.findMany({
+          skip,
+          take: limit,
+          where,
+          orderBy: {
+            createdAt: 'desc',
+          },
+          include,
+        }),
+        this.prismaService.client.count({ where }),
+      ]);
 
-      // Filter clients with sales if hasPurchased flag is set
       let filteredClients = clients;
       if (hasPurchased !== undefined) {
         filteredClients = clients.filter((client) => {
@@ -326,29 +186,17 @@ export class ClientsService {
           return hasPurchased ? hasSales : !hasSales;
         });
 
-        // Remove the sales information from the response
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         filteredClients = filteredClients.map(({ sales, ...client }) => client);
       }
 
-      // Get total count for pagination metadata
-      const total = await this.prismaService.client.count({ where });
-
-      // Calculate pagination metadata
-      const totalPages = Math.ceil(total / limit);
-
-      return {
-        data: filteredClients,
-        meta: {
-          total,
-          page,
-          limit,
-          totalPages,
-          hasNextPage: page < totalPages,
-          hasPreviousPage: page > 1,
-        },
-        message: 'Clients retrieved successfully',
-      };
+      return this.paginationService.createPaginationObject(
+        filteredClients,
+        total,
+        page,
+        limit,
+        'Clients retrieved successfully',
+      );
     } catch (error) {
       throw new BadRequestException(
         'Error retrieving clients: ' + error.message,
@@ -357,11 +205,11 @@ export class ClientsService {
   }
 
   /**
-   * Find a client by ID
-   *
+   * Retrieves a single client by their ID
    * @param id - Client's unique identifier
    * @returns Client information with success message
    * @throws NotFoundException if client is not found or inactive
+   * @throws BadRequestException if retrieval fails
    */
   async findOne(id: number) {
     try {
@@ -390,16 +238,15 @@ export class ClientsService {
   }
 
   /**
-   * Update a client's information
-   *
+   * Updates a client's information
    * @param id - Client's unique identifier
    * @param updateClientDto - Data to update
    * @returns Updated client with success message
    * @throws NotFoundException if client is not found or inactive
+   * @throws BadRequestException if update fails
    */
   async update(id: number, updateClientDto: UpdateClientDto) {
     try {
-      // Check if client exists
       const existingClient = await this.prismaService.client.findUnique({
         where: { id },
       });
@@ -410,7 +257,6 @@ export class ClientsService {
         );
       }
 
-      // Update the client
       const updatedClient = await this.prismaService.client.update({
         where: { id },
         data: updateClientDto,
@@ -429,16 +275,15 @@ export class ClientsService {
   }
 
   /**
-   * Activate or deactivate a client
-   *
+   * Activates or deactivates a client
    * @param id - Client's unique identifier
    * @param toggleActiveDto - Data containing isActive flag
    * @returns Updated client with success message
    * @throws NotFoundException if client is not found
+   * @throws BadRequestException if status update fails
    */
   async toggleActive(id: number, toggleActiveDto: ToggleActiveDto) {
     try {
-      // Check if client exists
       const existingClient = await this.prismaService.client.findUnique({
         where: { id },
       });
@@ -447,7 +292,6 @@ export class ClientsService {
         throw new NotFoundException(`Client with ID ${id} not found`);
       }
 
-      // Update the active status of the client
       const updatedClient = await this.prismaService.client.update({
         where: { id },
         data: {
@@ -472,12 +316,12 @@ export class ClientsService {
   }
 
   /**
-   * Get purchase history for a specific client
-   *
+   * Retrieves purchase history for a specific client with filtering and pagination
    * @param id - Client's unique identifier
    * @param options - Options for filtering and pagination
    * @returns Paginated list of client purchases with product details
    * @throws NotFoundException if client is not found or inactive
+   * @throws BadRequestException if retrieval fails
    */
   async getPurchaseHistory(
     id: number,
@@ -487,10 +331,9 @@ export class ClientsService {
       page?: number;
       limit?: number;
     },
-  ) {
+  ): Promise<PurchaseHistoryResponse<any>> {
     const { dateFrom, dateTo, page = 1, limit = 10 } = options;
 
-    // Check if client exists and is active
     const client = await this.prismaService.client.findUnique({
       where: { id },
     });
@@ -499,7 +342,6 @@ export class ClientsService {
       throw new NotFoundException(`Client with ID ${id} not found or inactive`);
     }
 
-    // Build date filter if provided
     const dateFilter: any = {};
     if (dateFrom) {
       dateFilter.gte = dateFrom;
@@ -508,67 +350,64 @@ export class ClientsService {
       dateFilter.lte = dateTo;
     }
 
-    // Calculate skip value for pagination
-    const skip = (page - 1) * limit;
+    const skip = this.paginationService.getPaginationSkip(page, limit);
 
     try {
-      // Get purchases for this client
-      const sales = await this.prismaService.sale.findMany({
-        where: {
-          clientId: id,
-          ...(Object.keys(dateFilter).length > 0
-            ? { saleDate: dateFilter }
-            : {}),
-        },
-        include: {
-          saleDetails: {
-            include: {
-              product: true,
+      const [sales, total] = await Promise.all([
+        this.prismaService.sale.findMany({
+          where: {
+            clientId: id,
+            ...(Object.keys(dateFilter).length > 0
+              ? { saleDate: dateFilter }
+              : {}),
+          },
+          include: {
+            saleDetails: {
+              include: {
+                product: true,
+              },
+            },
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
             },
           },
-          user: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
+          orderBy: {
+            saleDate: 'desc',
           },
-        },
-        orderBy: {
-          saleDate: 'desc',
-        },
-        skip,
-        take: limit,
-      });
+          skip,
+          take: limit,
+        }),
+        this.prismaService.sale.count({
+          where: {
+            clientId: id,
+            ...(Object.keys(dateFilter).length > 0
+              ? { saleDate: dateFilter }
+              : {}),
+          },
+        }),
+      ]);
 
-      // Get total count for pagination
-      const total = await this.prismaService.sale.count({
-        where: {
-          clientId: id,
-          ...(Object.keys(dateFilter).length > 0
-            ? { saleDate: dateFilter }
-            : {}),
-        },
-      });
-
-      // Calculate pagination metadata
-      const totalPages = Math.ceil(total / limit);
+      const response = this.paginationService.createPaginationObject(
+        sales,
+        total,
+        page,
+        limit,
+        'Purchase history retrieved successfully',
+      );
 
       return {
-        data: sales,
+        ...response,
         meta: {
-          total,
-          page,
-          limit,
-          totalPages,
-          hasNextPage: page < totalPages,
-          hasPreviousPage: page > 1,
+          ...response.meta,
           clientId: id,
           clientName: client.name,
         },
-        message: 'Purchase history retrieved successfully',
-      };
+      } as PurchaseHistoryResponse<any>;
     } catch (error) {
       throw new BadRequestException(
         'Error retrieving purchase history: ' + error.message,
@@ -577,18 +416,17 @@ export class ClientsService {
   }
 
   /**
-   * Generate a purchase report for a specific client
-   *
+   * Generates a purchase report for a specific client
    * @param id - Client's unique identifier
-   * @param period - Time period for the report
+   * @param period - Time period for the report ('month' | 'quarter' | 'year' | 'all')
    * @returns Summary report of client's purchase patterns
    * @throws NotFoundException if client is not found or inactive
+   * @throws BadRequestException if report generation fails
    */
   async generatePurchaseReport(
     id: number,
     period: 'month' | 'quarter' | 'year' | 'all' = 'all',
   ) {
-    // Check if client exists and is active
     const client = await this.prismaService.client.findUnique({
       where: { id },
     });
@@ -597,7 +435,6 @@ export class ClientsService {
       throw new NotFoundException(`Client with ID ${id} not found or inactive`);
     }
 
-    // Calculate date range based on period
     const now = new Date();
     let dateFrom: Date | undefined;
 
@@ -610,7 +447,6 @@ export class ClientsService {
     }
 
     try {
-      // Get all sales for this client within the specified period
       const sales = await this.prismaService.sale.findMany({
         where: {
           clientId: id,
@@ -628,7 +464,6 @@ export class ClientsService {
         },
       });
 
-      // Calculate summary statistics
       const totalPurchases = sales.length;
       const totalSpent = sales.reduce(
         (sum, sale) => sum + Number(sale.totalAmount),
@@ -637,7 +472,6 @@ export class ClientsService {
       const averagePurchaseValue =
         totalPurchases > 0 ? totalSpent / totalPurchases : 0;
 
-      // Track product purchases to identify favorites
       const productPurchases: Record<
         number,
         {
@@ -649,7 +483,6 @@ export class ClientsService {
         }
       > = {};
 
-      // Process all sale items
       sales.forEach((sale) => {
         sale.saleDetails.forEach((item) => {
           const productId = item.productId;
@@ -670,24 +503,19 @@ export class ClientsService {
         });
       });
 
-      // Convert to array and find favorite products
       const productsArray = Object.values(productPurchases);
 
-      // Sort by purchase frequency
       const favoriteProducts = productsArray
         .sort((a, b) => b.count - a.count)
         .slice(0, 5);
 
-      // Sort by total spent
       const mostValuedProducts = productsArray
         .sort((a, b) => b.totalSpent - a.totalSpent)
         .slice(0, 5);
 
-      // Get purchase dates to analyze frequency
       const purchaseDates = sales.map((sale) => new Date(sale.saleDate));
       purchaseDates.sort((a, b) => a.getTime() - b.getTime());
 
-      // Calculate days between purchases
       let totalDaysBetween = 0;
       let daysBetweenCount = 0;
 
@@ -703,7 +531,6 @@ export class ClientsService {
       const averageDaysBetweenPurchases =
         daysBetweenCount > 0 ? totalDaysBetween / daysBetweenCount : 0;
 
-      // First and last purchase dates
       const firstPurchaseDate =
         purchaseDates.length > 0 ? purchaseDates[0] : null;
       const lastPurchaseDate =

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { MovementType } from '../dto/create-inventory-movement.dto';
+import { MovementType } from '../dto/inventory-movement.types';
 
 export class ProductEntity {
   @ApiProperty({ example: 1 })

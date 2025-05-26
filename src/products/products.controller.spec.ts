@@ -1,6 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Decimal } from '@prisma/client/runtime/library';
 import { ToggleActiveService } from '../common/services/toggle-active.service';
-import { CreateProductDto, FilterProductDto, UpdateProductDto } from './dto';
+import {
+  AdjustStockDto,
+  CreateProductDto,
+  FilterProductDto,
+  UpdateProductDto,
+} from './dto';
 import { StockAdjustmentType } from './dto/adjust-stock.dto';
 import { ProductsController } from './products.controller';
 import { ProductsService } from './products.service';
@@ -10,35 +16,173 @@ describe('ProductsController', () => {
   let service: ProductsService;
   let toggleActiveService: ToggleActiveService;
 
-  const mockProductsService = {
-    create: jest.fn(),
-    findAll: jest.fn(),
-    findOne: jest.fn(),
-    update: jest.fn(),
-    getLowStockProducts: jest.fn(),
-    getPriceHistory: jest.fn(),
-    adjustStock: jest.fn(),
-    generateStockStatusReport: jest.fn(),
-    generateSalesPerformanceReport: jest.fn(),
-    generatePriceChangesReport: jest.fn(),
+  const mockProduct = {
+    id: 1,
+    name: 'Samsung Galaxy S21',
+    description: 'Smartphone with 6.2-inch screen, 128GB storage',
+    currentStock: 50,
+    minQuantity: 10,
+    maxQuantity: 100,
+    supplierId: 1,
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    supplier: {
+      id: 1,
+      name: 'Samsung Electronics',
+      email: 'contact@samsung.com',
+    },
+    prices: [
+      {
+        id: 1,
+        purchasePrice: new Decimal(350.5),
+        sellingPrice: new Decimal(500.0),
+        isCurrentPrice: true,
+        validFrom: new Date(),
+        validTo: null,
+        productId: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ],
   };
 
-  const mockToggleActiveService = {
-    toggleActive: jest.fn(),
+  const mockPaginatedResponse = {
+    data: [mockProduct],
+    meta: {
+      total: 1,
+      page: 1,
+      limit: 10,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    },
+    message: 'Products retrieved successfully',
+  };
+
+  const mockPriceHistory = {
+    data: [
+      {
+        id: 1,
+        purchasePrice: new Decimal(350.5),
+        sellingPrice: new Decimal(500.0),
+        isCurrentPrice: true,
+        validFrom: new Date(),
+        validTo: null,
+        productId: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: 2,
+        purchasePrice: new Decimal(300.0),
+        sellingPrice: new Decimal(450.0),
+        isCurrentPrice: false,
+        validFrom: new Date('2024-01-01'),
+        validTo: new Date(),
+        productId: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ],
+    message: 'Price history retrieved successfully',
+  };
+
+  const mockStockReport = {
+    summary: {
+      totalProducts: 1,
+      lowStockProducts: 0,
+      outOfStockProducts: 0,
+      overStockProducts: 0,
+      averageStockLevel: 50,
+    },
+    products: [mockProduct],
+    message: 'Stock status report generated successfully',
+  };
+
+  const mockSalesReport = {
+    summary: {
+      totalSales: 10,
+      totalRevenue: new Decimal(5000.0),
+      totalProfit: new Decimal(1495.0),
+      averageOrderValue: new Decimal(500.0),
+    },
+    products: [
+      {
+        ...mockProduct,
+        totalQuantitySold: 10,
+        totalRevenue: new Decimal(5000.0),
+        totalProfit: new Decimal(1495.0),
+      },
+    ],
+    message: 'Sales performance report generated successfully',
+  };
+
+  const mockPriceChangesReport = {
+    summary: {
+      totalChanges: 1,
+      averagePriceIncrease: new Decimal(50.0),
+      averagePriceDecrease: new Decimal(0),
+    },
+    changes: [
+      {
+        productId: 1,
+        productName: 'Samsung Galaxy S21',
+        oldPurchasePrice: new Decimal(300.0),
+        newPurchasePrice: new Decimal(350.5),
+        oldSellingPrice: new Decimal(450.0),
+        newSellingPrice: new Decimal(500.0),
+        changeDate: new Date(),
+      },
+    ],
+    message: 'Price changes report generated successfully',
   };
 
   beforeEach(async () => {
-    jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ProductsController],
       providers: [
         {
           provide: ProductsService,
-          useValue: mockProductsService,
+          useValue: {
+            create: jest.fn().mockResolvedValue(mockProduct),
+            findAll: jest.fn().mockResolvedValue(mockPaginatedResponse),
+            findOne: jest.fn().mockResolvedValue({
+              message: 'Product found',
+              product: mockProduct,
+            }),
+            update: jest.fn().mockResolvedValue(mockProduct),
+            getLowStockProducts: jest.fn().mockResolvedValue({
+              data: [mockProduct],
+              message: 'Low stock products retrieved successfully',
+            }),
+            getPriceHistory: jest.fn().mockResolvedValue(mockPriceHistory),
+            adjustStock: jest.fn().mockResolvedValue(mockProduct),
+            generateStockStatusReport: jest
+              .fn()
+              .mockResolvedValue(mockStockReport),
+            generateSalesPerformanceReport: jest
+              .fn()
+              .mockResolvedValue(mockSalesReport),
+            generatePriceChangesReport: jest
+              .fn()
+              .mockResolvedValue(mockPriceChangesReport),
+          },
         },
         {
           provide: ToggleActiveService,
-          useValue: mockToggleActiveService,
+          useValue: {
+            toggleActive: jest.fn().mockImplementation((type, id, data) => {
+              if (data.isActive) {
+                return Promise.resolve({
+                  message: 'Product activated successfully',
+                });
+              }
+              return Promise.resolve({
+                message: 'Product deactivated successfully',
+              });
+            }),
+          },
         },
       ],
     }).compile();
@@ -50,375 +194,176 @@ describe('ProductsController', () => {
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+    expect(service).toBeDefined();
+    expect(toggleActiveService).toBeDefined();
   });
 
   describe('create', () => {
-    it('should create a product', async () => {
-      // Arrange
-      const createProductDto: CreateProductDto = {
-        name: 'Test Product',
+    it('should create a new product', async () => {
+      const createDto: CreateProductDto = {
+        name: 'Samsung Galaxy S21',
+        description: 'Smartphone with 6.2-inch screen, 128GB storage',
+        minQuantity: 10,
+        maxQuantity: 100,
         supplierId: 1,
-        purchasePrice: 100,
-        sellingPrice: 150,
+        purchasePrice: 350.5,
+        sellingPrice: 500.0,
       };
 
-      const expectedResult = {
-        id: 1,
-        name: 'Test Product',
-        description: null,
-        minQuantity: 0,
-        maxQuantity: null,
-        currentStock: 0,
-        isActive: true,
-        supplierId: 1,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      mockProductsService.create.mockResolvedValue(expectedResult);
-
-      // Act
-      const result = await controller.create(createProductDto);
-
-      // Assert
-      expect(result).toEqual(expectedResult);
-      expect(service.create).toHaveBeenCalledWith(createProductDto);
-      expect(service.create).toHaveBeenCalledTimes(1);
+      const result = await controller.create(createDto);
+      expect(service.create).toHaveBeenCalledWith(createDto);
+      expect(result).toEqual(mockProduct);
     });
   });
 
   describe('findAll', () => {
     it('should return paginated products', async () => {
-      // Arrange
       const filterDto: FilterProductDto = {
         page: 1,
         limit: 10,
       };
 
-      const expectedResult = {
-        data: [
-          {
-            id: 1,
-            name: 'Test Product',
-            supplierId: 1,
-            currentStock: 10,
-            isActive: true,
-          },
-        ],
-        meta: {
-          total: 1,
-          page: 1,
-          limit: 10,
-          totalPages: 1,
-          hasNextPage: false,
-          hasPrevPage: false,
-        },
+      const result = await controller.findAll(filterDto);
+      expect(service.findAll).toHaveBeenCalledWith(filterDto);
+      expect(result).toEqual(mockPaginatedResponse);
+    });
+
+    it('should handle search filters', async () => {
+      const filterDto: FilterProductDto = {
+        name: 'Samsung',
+        isActive: true,
+        supplierId: 1,
       };
 
-      mockProductsService.findAll.mockResolvedValue(expectedResult);
-
-      // Act
       const result = await controller.findAll(filterDto);
-
-      // Assert
-      expect(result).toEqual(expectedResult);
       expect(service.findAll).toHaveBeenCalledWith(filterDto);
-      expect(service.findAll).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(mockPaginatedResponse);
+    });
+  });
+
+  describe('getLowStockProducts', () => {
+    it('should return low stock products', async () => {
+      const result = await controller.getLowStockProducts();
+      expect(service.getLowStockProducts).toHaveBeenCalled();
+      expect(result).toEqual({
+        data: [mockProduct],
+        message: 'Low stock products retrieved successfully',
+      });
     });
   });
 
   describe('findOne', () => {
-    it('should return a product by ID', async () => {
-      // Arrange
-      const productId = 1;
+    it('should return a product by id', async () => {
+      const result = await controller.findOne(1);
+      expect(service.findOne).toHaveBeenCalledWith(1);
+      expect(result).toEqual({
+        message: 'Product found',
+        product: mockProduct,
+      });
+    });
+  });
 
-      const expectedResult = {
-        id: productId,
-        name: 'Test Product',
-        supplierId: 1,
-        currentStock: 10,
-        isActive: true,
-      };
-
-      mockProductsService.findOne.mockResolvedValue(expectedResult);
-
-      // Act
-      const result = await controller.findOne(productId);
-
-      // Assert
-      expect(result).toEqual(expectedResult);
-      expect(service.findOne).toHaveBeenCalledWith(productId);
-      expect(service.findOne).toHaveBeenCalledTimes(1);
+  describe('getPriceHistory', () => {
+    it('should return price history for a product', async () => {
+      const result = await controller.getPriceHistory(1);
+      expect(service.getPriceHistory).toHaveBeenCalledWith(1);
+      expect(result).toEqual(mockPriceHistory);
     });
   });
 
   describe('update', () => {
     it('should update a product', async () => {
-      // Arrange
-      const productId = 1;
-      const updateProductDto: UpdateProductDto = {
-        name: 'Updated Product',
-        sellingPrice: 200,
+      const updateDto: UpdateProductDto = {
+        name: 'Samsung Galaxy S21 Ultra',
+        description: 'Updated description',
+        minQuantity: 15,
+        maxQuantity: 150,
       };
 
-      const expectedResult = {
-        id: productId,
-        name: 'Updated Product',
-        supplierId: 1,
-        currentStock: 10,
-        isActive: true,
+      const result = await controller.update(1, updateDto);
+      expect(service.update).toHaveBeenCalledWith(1, updateDto);
+      expect(result).toEqual(mockProduct);
+    });
+  });
+
+  describe('adjustStock', () => {
+    it('should adjust product stock', async () => {
+      const adjustStockDto: AdjustStockDto = {
+        type: StockAdjustmentType.INCREASE,
+        quantity: 10,
+        reason: 'Manual adjustment',
       };
 
-      mockProductsService.update.mockResolvedValue(expectedResult);
-
-      // Act
-      const result = await controller.update(productId, updateProductDto);
-
-      // Assert
-      expect(result).toEqual(expectedResult);
-      expect(service.update).toHaveBeenCalledWith(productId, updateProductDto);
-      expect(service.update).toHaveBeenCalledTimes(1);
+      const result = await controller.adjustStock(1, adjustStockDto);
+      expect(service.adjustStock).toHaveBeenCalledWith(1, adjustStockDto);
+      expect(result).toEqual(mockProduct);
     });
   });
 
   describe('deactivate', () => {
     it('should deactivate a product', async () => {
-      // Arrange
-      const productId = 1;
-      const expectedResult = {
-        message: 'product deactivated successfully',
-        data: {
-          id: productId,
-          isActive: false,
-        },
-      };
-
-      mockToggleActiveService.toggleActive.mockResolvedValue(expectedResult);
-
-      // Act
-      const result = await controller.deactivate(productId);
-
-      // Assert
-      expect(result).toEqual(expectedResult);
+      const result = await controller.deactivate(1);
       expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
         'product',
-        productId,
+        1,
         { isActive: false },
       );
-      expect(toggleActiveService.toggleActive).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({
+        message: 'Product deactivated successfully',
+      });
     });
   });
 
   describe('activate', () => {
     it('should activate a product', async () => {
-      // Arrange
-      const productId = 1;
-      const expectedResult = {
-        message: 'product activated successfully',
-        data: {
-          id: productId,
-          isActive: true,
-        },
-      };
-
-      mockToggleActiveService.toggleActive.mockResolvedValue(expectedResult);
-
-      // Act
-      const result = await controller.activate(productId);
-
-      // Assert
-      expect(result).toEqual(expectedResult);
+      const result = await controller.activate(1);
       expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
         'product',
-        productId,
+        1,
         { isActive: true },
       );
-      expect(toggleActiveService.toggleActive).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('getLowStockProducts', () => {
-    it('should return a list of products with stock below minimum quantity', async () => {
-      const mockResponse = {
-        data: [],
-        message: 'Low stock products retrieved successfully',
-      };
-
-      jest
-        .spyOn(service, 'getLowStockProducts')
-        .mockResolvedValue(mockResponse);
-
-      const result = await controller.getLowStockProducts();
-
-      expect(service.getLowStockProducts).toHaveBeenCalled();
-      expect(result).toEqual(mockResponse);
-    });
-  });
-
-  describe('getPriceHistory', () => {
-    it('should return price history for a specific product', async () => {
-      const productId = 1;
-      const mockResponse = {
-        data: {
-          product: { id: productId, name: 'Test Product' },
-          priceHistory: [],
-        },
-        message: 'Price history retrieved successfully',
-      };
-
-      jest.spyOn(service, 'getPriceHistory').mockResolvedValue(mockResponse);
-
-      const result = await controller.getPriceHistory(productId);
-
-      expect(service.getPriceHistory).toHaveBeenCalledWith(productId);
-      expect(result).toEqual(mockResponse);
-    });
-  });
-
-  describe('adjustStock', () => {
-    it('should adjust stock for a product', async () => {
-      const productId = 1;
-      const adjustStockDto = {
-        type: StockAdjustmentType.INCREASE,
-        quantity: 5,
-        reason: 'Test adjustment',
-      };
-
-      const mockProduct = {
-        id: productId,
-        name: 'Test Product',
-        description: 'Test Description',
-        minQuantity: 10,
-        maxQuantity: 100,
-        currentStock: 15,
-        isActive: true,
-        supplierId: 1,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      const mockResponse = {
-        data: mockProduct,
-        message: 'Stock successfully increased by 5 units',
-      };
-
-      jest.spyOn(service, 'adjustStock').mockResolvedValue(mockResponse);
-
-      const result = await controller.adjustStock(productId, adjustStockDto);
-
-      expect(service.adjustStock).toHaveBeenCalledWith(
-        productId,
-        adjustStockDto,
-      );
-      expect(result).toEqual(mockResponse);
+      expect(result).toEqual({
+        message: 'Product activated successfully',
+      });
     });
   });
 
   describe('getStockStatusReport', () => {
-    it('should generate a stock status report', async () => {
-      const mockReport = {
-        data: {
-          summary: {
-            totalProducts: 10,
-            totalStock: 500,
-            averageStock: 50,
-            totalStockValue: 25000,
-            lowStockCount: 2,
-            highStockCount: 1,
-            optimalStockCount: 7,
-          },
-          stockCategories: {
-            lowStock: [],
-            highStock: [],
-            optimalStock: [],
-          },
-        },
-        message: 'Stock status report generated successfully',
-      };
-
-      jest
-        .spyOn(service, 'generateStockStatusReport')
-        .mockResolvedValue(mockReport);
-
+    it('should generate stock status report', async () => {
       const result = await controller.getStockStatusReport();
-
       expect(service.generateStockStatusReport).toHaveBeenCalled();
-      expect(result).toEqual(mockReport);
+      expect(result).toEqual(mockStockReport);
     });
   });
 
   describe('getSalesPerformanceReport', () => {
-    it('should generate a sales performance report', async () => {
-      const mockReport = {
-        data: {
-          summary: {
-            period: {
-              from: new Date('2023-01-01'),
-              to: new Date('2023-12-31'),
-            },
-            totalRevenue: 15000,
-            totalQuantitySold: 300,
-            totalProductsSold: 5,
-          },
-          topProductsByQuantity: [],
-          topProductsByRevenue: [],
-        },
-        message: 'Sales performance report generated successfully',
-      };
-
-      const dateFrom = '2023-01-01';
-      const dateTo = '2023-12-31';
-
-      jest
-        .spyOn(service, 'generateSalesPerformanceReport')
-        .mockResolvedValue(mockReport);
+    it('should generate sales performance report', async () => {
+      const dateFrom = '2024-01-01';
+      const dateTo = '2024-12-31';
 
       const result = await controller.getSalesPerformanceReport(
         dateFrom,
         dateTo,
       );
-
       expect(service.generateSalesPerformanceReport).toHaveBeenCalledWith(
         new Date(dateFrom),
         new Date(dateTo),
       );
-      expect(result).toEqual(mockReport);
+      expect(result).toEqual(mockSalesReport);
     });
   });
 
   describe('getPriceChangesReport', () => {
-    it('should generate a price changes report', async () => {
-      const mockReport = {
-        data: {
-          summary: {
-            period: {
-              from: new Date('2023-01-01'),
-              to: new Date('2023-12-31'),
-            },
-            totalPriceChanges: 15,
-            productsWithPriceChanges: 8,
-            avgPurchasePriceChangePercent: 5.2,
-            avgSellingPriceChangePercent: 7.5,
-          },
-          productsWithPriceChanges: [],
-        },
-        message: 'Price changes report generated successfully',
-      };
-
-      const dateFrom = '2023-01-01';
-      const dateTo = '2023-12-31';
-
-      jest
-        .spyOn(service, 'generatePriceChangesReport')
-        .mockResolvedValue(mockReport);
+    it('should generate price changes report', async () => {
+      const dateFrom = '2024-01-01';
+      const dateTo = '2024-12-31';
 
       const result = await controller.getPriceChangesReport(dateFrom, dateTo);
-
       expect(service.generatePriceChangesReport).toHaveBeenCalledWith(
         new Date(dateFrom),
         new Date(dateTo),
       );
-      expect(result).toEqual(mockReport);
+      expect(result).toEqual(mockPriceChangesReport);
     });
   });
 });

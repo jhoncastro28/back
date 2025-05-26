@@ -3,44 +3,46 @@ import { ToggleActiveService } from '../common/services/toggle-active.service';
 import { ClientsController } from './clients.controller';
 import { ClientsService } from './clients.service';
 import { CreateClientDto, FilterClientDto, UpdateClientDto } from './dto';
+import { LoginClientDto } from './dto/login-client.dto';
+import { DocumentType } from './entities/client.entity';
 
 describe('ClientsController', () => {
   let controller: ClientsController;
   let clientsService: ClientsService;
   let toggleActiveService: ToggleActiveService;
 
-  // Mock responses
-  const mockClientResponse = {
-    message: 'Client created successfully',
-    client: {
+  const mockClient = {
+    id: 1,
+    name: 'John Doe',
+    email: 'john@example.com',
+    phoneNumber: '123456789',
+    address: 'Test Address',
+    documentType: DocumentType.CC,
+    documentNumber: '12345678',
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const mockLoginResponse = {
+    message: 'Login successful',
+    user: {
       id: 1,
-      name: 'John Doe',
-      email: 'john.doe@example.com',
-      phoneNumber: '+1 555-123-4567',
-      address: '123 Main St',
-      documentType: 'CC',
-      documentNumber: '1234567890',
+      firstName: 'John',
+      lastName: 'Doe',
+      email: 'john@example.com',
+      documentType: DocumentType.CC,
+      documentNumber: '12345678',
+      role: 'CLIENT',
       isActive: true,
       createdAt: new Date(),
       updatedAt: new Date(),
     },
+    token: 'mock-token',
   };
 
-  const mockPaginatedClients = {
-    data: [
-      {
-        id: 1,
-        name: 'John Doe',
-        email: 'john.doe@example.com',
-        phoneNumber: '+1 555-123-4567',
-        address: '123 Main St',
-        documentType: 'CC',
-        documentNumber: '1234567890',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-    ],
+  const mockPaginatedResponse = {
+    data: [mockClient],
     meta: {
       total: 1,
       page: 1,
@@ -52,141 +54,6 @@ describe('ClientsController', () => {
     message: 'Clients retrieved successfully',
   };
 
-  const mockDeactivatedClientResponse = {
-    message: 'Client deactivated successfully',
-    client: {
-      id: 1,
-      name: 'John Doe',
-      email: 'john.doe@example.com',
-      phoneNumber: '+1 555-123-4567',
-      address: '123 Main St',
-      documentType: 'CC',
-      documentNumber: '1234567890',
-      isActive: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-  };
-
-  const mockPurchaseHistoryResponse = {
-    data: [
-      {
-        id: 1,
-        saleDate: new Date('2023-06-15'),
-        totalAmount: 750,
-        clientId: 1,
-        userId: 'user-123',
-        saleDetails: [
-          {
-            id: 1,
-            quantity: 3,
-            unitPrice: 150,
-            subtotal: 450,
-            productId: 1,
-            saleId: 1,
-            product: {
-              id: 1,
-              name: 'Product 1',
-            },
-          },
-          {
-            id: 2,
-            quantity: 2,
-            unitPrice: 150,
-            subtotal: 300,
-            productId: 2,
-            saleId: 1,
-            product: {
-              id: 2,
-              name: 'Product 2',
-            },
-          },
-        ],
-        user: {
-          id: 'user-123',
-          firstName: 'John',
-          lastName: 'Doe',
-          email: 'john.doe@example.com',
-        },
-      },
-    ],
-    meta: {
-      total: 1,
-      page: 1,
-      limit: 10,
-      totalPages: 1,
-      hasNextPage: false,
-      hasPreviousPage: false,
-      clientId: 1,
-      clientName: 'John Doe',
-    },
-    message: 'Purchase history retrieved successfully',
-  };
-
-  const mockPurchaseReportResponse = {
-    data: {
-      client: {
-        id: 1,
-        name: 'John Doe',
-        email: 'john.doe@example.com',
-      },
-      summary: {
-        totalPurchases: 5,
-        totalSpent: 2500,
-        averagePurchaseValue: 500,
-        firstPurchaseDate: new Date('2023-01-15'),
-        lastPurchaseDate: new Date('2023-06-20'),
-        averageDaysBetweenPurchases: 31.25,
-        period: 'all',
-      },
-      favoriteProducts: [
-        {
-          productId: 1,
-          name: 'Product 1',
-          count: 5,
-          totalQuantity: 15,
-          totalSpent: 1500,
-        },
-      ],
-      mostValuedProducts: [
-        {
-          productId: 1,
-          name: 'Product 1',
-          count: 5,
-          totalQuantity: 15,
-          totalSpent: 1500,
-        },
-      ],
-      recentPurchases: [],
-    },
-    message: 'Purchase report generated successfully',
-  };
-
-  // Mock DTOs
-  const mockCreateClientDto: CreateClientDto = {
-    name: 'John Doe',
-    email: 'john.doe@example.com',
-    phoneNumber: '+1 555-123-4567',
-    address: '123 Main St',
-    documentType: 'CC' as any,
-    documentNumber: '1234567890',
-  };
-
-  const mockUpdateClientDto: UpdateClientDto = {
-    email: 'updated.email@example.com',
-  };
-
-  const mockFilterClientDto: FilterClientDto = {
-    page: 1,
-    limit: 10,
-    name: 'John',
-    hasPurchased: true,
-  };
-
-  const mockToggleActiveService = {
-    toggleActive: jest.fn(),
-  };
-
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ClientsController],
@@ -194,21 +61,45 @@ describe('ClientsController', () => {
         {
           provide: ClientsService,
           useValue: {
-            create: jest.fn().mockResolvedValue(mockClientResponse),
-            findAll: jest.fn().mockResolvedValue(mockPaginatedClients),
-            findOne: jest.fn().mockResolvedValue(mockClientResponse),
-            update: jest.fn().mockResolvedValue(mockClientResponse),
-            getPurchaseHistory: jest
-              .fn()
-              .mockResolvedValue(mockPurchaseHistoryResponse),
-            generatePurchaseReport: jest
-              .fn()
-              .mockResolvedValue(mockPurchaseReportResponse),
+            loginWithDocument: jest.fn().mockResolvedValue(mockLoginResponse),
+            create: jest.fn().mockResolvedValue({
+              message: 'Client created successfully',
+              client: mockClient,
+            }),
+            findAll: jest.fn().mockResolvedValue(mockPaginatedResponse),
+            findOne: jest.fn().mockResolvedValue({
+              message: 'Client found',
+              client: mockClient,
+            }),
+            update: jest.fn().mockResolvedValue({
+              message: 'Client updated successfully',
+              client: mockClient,
+            }),
+            getPurchaseHistory: jest.fn().mockResolvedValue({
+              data: [],
+              meta: { total: 0, page: 1, limit: 10 },
+              message: 'Purchase history retrieved successfully',
+            }),
+            generatePurchaseReport: jest.fn().mockResolvedValue({
+              data: { totalPurchases: 0, totalAmount: 0 },
+              message: 'Purchase report generated successfully',
+            }),
           },
         },
         {
           provide: ToggleActiveService,
-          useValue: mockToggleActiveService,
+          useValue: {
+            toggleActive: jest.fn().mockImplementation((type, id, data) => {
+              if (data.isActive) {
+                return Promise.resolve({
+                  message: 'Client activated successfully',
+                });
+              }
+              return Promise.resolve({
+                message: 'Client deactivated successfully',
+              });
+            }),
+          },
         },
       ],
     }).compile();
@@ -220,21 +111,54 @@ describe('ClientsController', () => {
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+    expect(clientsService).toBeDefined();
+    expect(toggleActiveService).toBeDefined();
+  });
+
+  describe('loginClient', () => {
+    it('should login a client with document credentials', async () => {
+      const loginDto: LoginClientDto = {
+        documentType: DocumentType.CC,
+        documentNumber: '12345678',
+      };
+
+      const result = await controller.loginClient(loginDto);
+      expect(clientsService.loginWithDocument).toHaveBeenCalledWith(loginDto);
+      expect(result).toEqual(mockLoginResponse);
+    });
   });
 
   describe('create', () => {
     it('should create a new client', async () => {
-      const result = await controller.create(mockCreateClientDto);
-      expect(clientsService.create).toHaveBeenCalledWith(mockCreateClientDto);
-      expect(result).toEqual(mockClientResponse);
+      const createDto: CreateClientDto = {
+        name: 'John Doe',
+        email: 'john@example.com',
+        phoneNumber: '123456789',
+        address: 'Test Address',
+        documentType: DocumentType.CC,
+        documentNumber: '12345678',
+      };
+
+      const result = await controller.create(createDto);
+      expect(clientsService.create).toHaveBeenCalledWith(createDto);
+      expect(result).toEqual({
+        message: 'Client created successfully',
+        client: mockClient,
+      });
     });
   });
 
   describe('findAll', () => {
-    it('should return paginated clients with filters', async () => {
-      const result = await controller.findAll(mockFilterClientDto);
-      expect(clientsService.findAll).toHaveBeenCalledWith(mockFilterClientDto);
-      expect(result).toEqual(mockPaginatedClients);
+    it('should return paginated clients', async () => {
+      const filterDto: FilterClientDto = {
+        page: 1,
+        limit: 10,
+        isActive: true,
+      };
+
+      const result = await controller.findAll(filterDto);
+      expect(clientsService.findAll).toHaveBeenCalledWith(filterDto);
+      expect(result).toEqual(mockPaginatedResponse);
     });
   });
 
@@ -242,130 +166,107 @@ describe('ClientsController', () => {
     it('should return a client by id', async () => {
       const result = await controller.findOne(1);
       expect(clientsService.findOne).toHaveBeenCalledWith(1);
-      expect(result).toEqual(mockClientResponse);
+      expect(result).toEqual({
+        message: 'Client found',
+        client: mockClient,
+      });
     });
   });
 
   describe('update', () => {
     it('should update a client', async () => {
-      const result = await controller.update(1, mockUpdateClientDto);
-      expect(clientsService.update).toHaveBeenCalledWith(
-        1,
-        mockUpdateClientDto,
-      );
-      expect(result).toEqual(mockClientResponse);
+      const updateDto: UpdateClientDto = {
+        name: 'John Updated',
+        email: 'john.updated@example.com',
+      };
+
+      const result = await controller.update(1, updateDto);
+      expect(clientsService.update).toHaveBeenCalledWith(1, updateDto);
+      expect(result).toEqual({
+        message: 'Client updated successfully',
+        client: mockClient,
+      });
     });
   });
 
   describe('deactivate', () => {
     it('should deactivate a client', async () => {
-      mockToggleActiveService.toggleActive.mockResolvedValue(
-        mockDeactivatedClientResponse,
-      );
       const result = await controller.deactivate(1);
       expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
         'client',
         1,
         { isActive: false },
       );
-      expect(result).toEqual(mockDeactivatedClientResponse);
+      expect(result).toEqual({
+        message: 'Client deactivated successfully',
+      });
     });
   });
 
   describe('activate', () => {
     it('should activate a client', async () => {
-      const clientId = 1;
-      const expectedResult = {
-        message: 'client activated successfully',
-        data: {
-          id: clientId,
-          isActive: true,
-        },
-      };
-
-      mockToggleActiveService.toggleActive.mockResolvedValue(expectedResult);
-
-      const result = await controller.activate(clientId);
-
-      expect(result).toEqual(expectedResult);
+      const result = await controller.activate(1);
       expect(toggleActiveService.toggleActive).toHaveBeenCalledWith(
         'client',
-        clientId,
+        1,
         { isActive: true },
       );
+      expect(result).toEqual({
+        message: 'Client activated successfully',
+      });
     });
   });
 
   describe('getPurchaseHistory', () => {
-    it('should return purchase history for a client', async () => {
-      const clientId = 1;
-      const dateFrom = '2023-01-01';
-      const dateTo = '2023-12-31';
-      const page = 1;
-      const limit = 10;
-
-      const result = await controller.getPurchaseHistory(
-        clientId,
-        dateFrom,
-        dateTo,
-        page,
-        limit,
-      );
-
-      expect(clientsService.getPurchaseHistory).toHaveBeenCalledWith(clientId, {
-        dateFrom: new Date(dateFrom),
-        dateTo: new Date(dateTo),
-        page,
-        limit,
+    it('should return client purchase history', async () => {
+      const result = await controller.getPurchaseHistory(1);
+      expect(clientsService.getPurchaseHistory).toHaveBeenCalledWith(1, {});
+      expect(result).toEqual({
+        data: [],
+        meta: { total: 0, page: 1, limit: 10 },
+        message: 'Purchase history retrieved successfully',
       });
-      expect(result).toEqual(mockPurchaseHistoryResponse);
     });
 
-    it('should handle undefined date parameters', async () => {
-      const clientId = 1;
-      const page = 1;
-      const limit = 10;
-
-      await controller.getPurchaseHistory(
-        clientId,
-        undefined,
-        undefined,
-        page,
-        limit,
-      );
-
-      expect(clientsService.getPurchaseHistory).toHaveBeenCalledWith(clientId, {
-        dateFrom: undefined,
-        dateTo: undefined,
-        page,
-        limit,
+    it('should handle date filters', async () => {
+      const dateFrom = '2024-01-01';
+      const dateTo = '2024-12-31';
+      const result = await controller.getPurchaseHistory(1, dateFrom, dateTo);
+      expect(clientsService.getPurchaseHistory).toHaveBeenCalledWith(1, {
+        dateFrom: new Date(dateFrom),
+        dateTo: new Date(dateTo),
+      });
+      expect(result).toEqual({
+        data: [],
+        meta: { total: 0, page: 1, limit: 10 },
+        message: 'Purchase history retrieved successfully',
       });
     });
   });
 
   describe('getPurchaseReport', () => {
-    it('should return purchase report for a client with period', async () => {
-      const clientId = 1;
-      const period = 'month';
-
-      const result = await controller.getPurchaseReport(clientId, period);
-
+    it('should return client purchase report', async () => {
+      const result = await controller.getPurchaseReport(1);
       expect(clientsService.generatePurchaseReport).toHaveBeenCalledWith(
-        clientId,
-        period,
-      );
-      expect(result).toEqual(mockPurchaseReportResponse);
-    });
-
-    it('should use default period if not provided', async () => {
-      const clientId = 1;
-
-      await controller.getPurchaseReport(clientId);
-
-      expect(clientsService.generatePurchaseReport).toHaveBeenCalledWith(
-        clientId,
+        1,
         'all',
       );
+      expect(result).toEqual({
+        data: { totalPurchases: 0, totalAmount: 0 },
+        message: 'Purchase report generated successfully',
+      });
+    });
+
+    it('should handle period filter', async () => {
+      const result = await controller.getPurchaseReport(1, 'month');
+      expect(clientsService.generatePurchaseReport).toHaveBeenCalledWith(
+        1,
+        'month',
+      );
+      expect(result).toEqual({
+        data: { totalPurchases: 0, totalAmount: 0 },
+        message: 'Purchase report generated successfully',
+      });
     });
   });
 });

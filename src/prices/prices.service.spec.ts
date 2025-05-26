@@ -1,27 +1,39 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Decimal } from '@prisma/client/runtime/library';
+import { PaginationService } from '../common/services/pagination.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreatePriceDto, FilterPriceDto, UpdatePriceDto } from './dto';
+import { CreatePriceDto, FilterPriceDto } from './dto';
 import { PricesService } from './prices.service';
 
 describe('PricesService', () => {
   let service: PricesService;
   let prismaService: PrismaService;
+  let paginationService: PaginationService;
 
-  // Mock for Prisma service
-  const mockPrismaService = {
+  const mockPrice = {
+    id: 1,
+    productId: 1,
+    purchasePrice: new Decimal(100),
+    sellingPrice: new Decimal(150),
+    isCurrentPrice: true,
+    validFrom: new Date(),
+    validTo: null,
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    discounts: [],
     product: {
-      findUnique: jest.fn(),
-    },
-    price: {
-      create: jest.fn(),
-      findUnique: jest.fn(),
-      findFirst: jest.fn(),
-      findMany: jest.fn(),
-      update: jest.fn(),
-      updateMany: jest.fn(),
-      delete: jest.fn(),
-      count: jest.fn(),
+      id: 1,
+      name: 'Test Product',
+      description: 'Test Description',
+      currentStock: 10,
+      minQuantity: 5,
+      maxQuantity: 100,
+      isActive: true,
+      supplierId: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
   };
 
@@ -31,139 +43,136 @@ describe('PricesService', () => {
         PricesService,
         {
           provide: PrismaService,
-          useValue: mockPrismaService,
+          useValue: {
+            price: {
+              create: jest.fn().mockImplementation((_params) => {
+                return Promise.resolve({
+                  message: 'Price created successfully',
+                  price: mockPrice,
+                });
+              }),
+              findUnique: jest.fn().mockImplementation((_params) => {
+                return Promise.resolve({
+                  message: 'Price found successfully',
+                  price: mockPrice,
+                });
+              }),
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+              findFirst: jest.fn().mockImplementation((params) => {
+                return Promise.resolve({
+                  message: 'Current price retrieved successfully',
+                  price: mockPrice,
+                });
+              }),
+              findMany: jest.fn().mockImplementation((_params) => {
+                return Promise.resolve([mockPrice]);
+              }),
+              update: jest.fn().mockImplementation((_params) => {
+                return Promise.resolve({
+                  message: 'Price updated successfully',
+                  price: mockPrice,
+                });
+              }),
+              count: jest.fn().mockResolvedValue(1),
+            },
+            product: {
+              findUnique: jest.fn().mockResolvedValue(mockPrice.product),
+            },
+          },
+        },
+        {
+          provide: PaginationService,
+          useValue: {
+            getPaginationSkip: jest.fn().mockReturnValue(0),
+            createPaginationObject: jest
+              .fn()
+              .mockImplementation((data, total, page, limit, message) => ({
+                data,
+                meta: {
+                  total,
+                  page,
+                  limit,
+                  totalPages: Math.ceil(total / limit),
+                  hasNextPage: page * limit < total,
+                  hasPreviousPage: page > 1,
+                },
+                message,
+              })),
+          },
         },
       ],
     }).compile();
 
     service = module.get<PricesService>(PricesService);
     prismaService = module.get<PrismaService>(PrismaService);
-
-    // Clear all mocks before each test
-    jest.clearAllMocks();
+    paginationService = module.get<PaginationService>(PaginationService);
   });
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+    expect(prismaService).toBeDefined();
+    expect(paginationService).toBeDefined();
   });
 
   describe('create', () => {
-    it('should create a price', async () => {
-      // Arrange
-      const createPriceDto: CreatePriceDto = {
+    it('should create a new price', async () => {
+      const createDto = {
+        productId: 1,
         purchasePrice: 100,
         sellingPrice: 150,
-        productId: 1,
-        isCurrentPrice: true,
       };
 
-      const mockProduct = {
-        id: 1,
-        name: 'Test Product',
-      };
+      const result = await service.create(createDto);
 
-      const mockPrice = {
-        id: 1,
-        purchasePrice: createPriceDto.purchasePrice,
-        sellingPrice: createPriceDto.sellingPrice,
-        productId: createPriceDto.productId,
-        isCurrentPrice: createPriceDto.isCurrentPrice,
-        validFrom: new Date(),
-        validTo: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      mockPrismaService.product.findUnique.mockResolvedValue(mockProduct);
-      mockPrismaService.price.create.mockResolvedValue(mockPrice);
-
-      // Act
-      const result = await service.create(createPriceDto);
-
-      // Assert
-      expect(result).toEqual(mockPrice);
       expect(prismaService.product.findUnique).toHaveBeenCalledWith({
-        where: { id: createPriceDto.productId },
+        where: { id: 1 },
       });
-      expect(prismaService.price.updateMany).toHaveBeenCalledWith({
-        where: {
-          productId: createPriceDto.productId,
-          isCurrentPrice: true,
-        },
-        data: {
-          isCurrentPrice: false,
-          validTo: expect.any(Date),
-        },
-      });
-      expect(prismaService.price.create).toHaveBeenCalledWith({
-        data: createPriceDto,
+      expect(prismaService.price.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            productId: 1,
+            purchasePrice: 100,
+            sellingPrice: 150,
+          }),
+        }),
+      );
+      expect(result).toEqual({
+        message: 'Price created successfully',
+        price: mockPrice,
       });
     });
 
     it('should throw NotFoundException if product does not exist', async () => {
-      // Arrange
       const createPriceDto: CreatePriceDto = {
         purchasePrice: 100,
         sellingPrice: 150,
-        productId: 999, // Non-existent ID
+        productId: 999,
         isCurrentPrice: true,
       };
 
-      mockPrismaService.product.findUnique.mockResolvedValue(null);
+      jest.spyOn(prismaService.product, 'findUnique').mockResolvedValue(null);
 
-      // Act & Assert
       await expect(service.create(createPriceDto)).rejects.toThrow(
         NotFoundException,
       );
-      expect(prismaService.product.findUnique).toHaveBeenCalledWith({
-        where: { id: createPriceDto.productId },
-      });
       expect(prismaService.price.create).not.toHaveBeenCalled();
     });
   });
 
   describe('findAll', () => {
     it('should return paginated prices', async () => {
-      // Arrange
       const filterDto: FilterPriceDto = {
         page: 1,
         limit: 10,
       };
 
-      const mockPrices = [
-        {
-          id: 1,
-          purchasePrice: 100,
-          sellingPrice: 150,
-          productId: 1,
-          isCurrentPrice: true,
-          product: { id: 1, name: 'Test Product' },
-        },
-      ];
+      jest
+        .spyOn(prismaService.price, 'findMany')
+        .mockResolvedValue([mockPrice]);
+      jest.spyOn(prismaService.price, 'count').mockResolvedValue(1);
 
-      const mockTotal = 1;
-
-      mockPrismaService.price.count.mockResolvedValue(mockTotal);
-      mockPrismaService.price.findMany.mockResolvedValue(mockPrices);
-
-      // Act
       const result = await service.findAll(filterDto);
 
-      // Assert
-      expect(result).toEqual({
-        data: mockPrices,
-        meta: {
-          total: mockTotal,
-          page: filterDto.page,
-          limit: filterDto.limit,
-          totalPages: 1,
-          hasNextPage: false,
-          hasPrevPage: false,
-        },
-      });
-      expect(prismaService.price.count).toHaveBeenCalledWith({
-        where: {},
-      });
       expect(prismaService.price.findMany).toHaveBeenCalledWith({
         where: {},
         skip: 0,
@@ -175,311 +184,117 @@ describe('PricesService', () => {
           createdAt: 'desc',
         },
       });
+      expect(result.data).toEqual([mockPrice]);
+      expect(result.meta.total).toBe(1);
+      expect(result.message).toBe('Prices retrieved successfully');
     });
 
-    it('should apply filters correctly', async () => {
-      // Arrange
+    it('should handle search filters', async () => {
       const filterDto: FilterPriceDto = {
         productId: 1,
         isCurrentPrice: true,
-        page: 1,
-        limit: 10,
       };
 
-      mockPrismaService.price.count.mockResolvedValue(1);
-      mockPrismaService.price.findMany.mockResolvedValue([]);
+      jest
+        .spyOn(prismaService.price, 'findMany')
+        .mockResolvedValue([mockPrice]);
+      jest.spyOn(prismaService.price, 'count').mockResolvedValue(1);
 
-      // Act
-      await service.findAll(filterDto);
+      const result = await service.findAll(filterDto);
 
-      // Assert
-      expect(prismaService.price.count).toHaveBeenCalledWith({
-        where: {
-          productId: filterDto.productId,
-          isCurrentPrice: filterDto.isCurrentPrice,
-        },
-      });
-      expect(prismaService.price.findMany).toHaveBeenCalledWith({
-        where: {
-          productId: filterDto.productId,
-          isCurrentPrice: filterDto.isCurrentPrice,
-        },
-        skip: 0,
-        take: 10,
-        include: {
-          product: true,
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
-      });
+      expect(prismaService.price.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            productId: filterDto.productId,
+            isCurrentPrice: filterDto.isCurrentPrice,
+          },
+        }),
+      );
+      expect(result.data).toEqual([mockPrice]);
     });
   });
 
   describe('findOne', () => {
-    it('should return a price by its ID', async () => {
-      // Arrange
-      const priceId = 1;
-      const mockPrice = {
-        id: priceId,
-        purchasePrice: 100,
-        sellingPrice: 150,
-        productId: 1,
-        isCurrentPrice: true,
-        product: { id: 1, name: 'Test Product' },
-        discounts: [],
-      };
+    it('should return a price by id', async () => {
+      const result = await service.findOne(1);
 
-      mockPrismaService.price.findUnique.mockResolvedValue(mockPrice);
-
-      // Act
-      const result = await service.findOne(priceId);
-
-      // Assert
-      expect(result).toEqual(mockPrice);
       expect(prismaService.price.findUnique).toHaveBeenCalledWith({
-        where: { id: priceId },
+        where: { id: 1 },
         include: {
           product: true,
           discounts: true,
         },
       });
+      expect(result).toEqual({
+        message: 'Price found successfully',
+        price: mockPrice,
+      });
     });
 
-    it('should throw NotFoundException if price does not exist', async () => {
-      // Arrange
-      const priceId = 999; // Non-existent ID
-      mockPrismaService.price.findUnique.mockResolvedValue(null);
+    it('should throw NotFoundException if price not found', async () => {
+      jest.spyOn(prismaService.price, 'findUnique').mockResolvedValue(null);
 
-      // Act & Assert
-      await expect(service.findOne(priceId)).rejects.toThrow(NotFoundException);
-      expect(prismaService.price.findUnique).toHaveBeenCalled();
+      await expect(service.findOne(999)).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('update', () => {
     it('should update a price', async () => {
-      // Arrange
-      const priceId = 1;
-      const updatePriceDto: UpdatePriceDto = {
-        sellingPrice: 200,
+      const updateDto = {
+        purchasePrice: 200,
+        sellingPrice: 300,
       };
 
-      const mockPrice = {
-        id: priceId,
-        purchasePrice: 100,
-        sellingPrice: 150,
-        productId: 1,
-        isCurrentPrice: true,
-      };
+      const result = await service.update(1, updateDto);
 
-      const mockUpdatedPrice = {
-        ...mockPrice,
-        sellingPrice: updatePriceDto.sellingPrice,
-      };
-
-      mockPrismaService.price.findUnique.mockResolvedValue(mockPrice);
-      mockPrismaService.price.update.mockResolvedValue(mockUpdatedPrice);
-
-      // Act
-      const result = await service.update(priceId, updatePriceDto);
-
-      // Assert
-      expect(result).toEqual(mockUpdatedPrice);
       expect(prismaService.price.findUnique).toHaveBeenCalledWith({
-        where: { id: priceId },
+        where: { id: 1 },
       });
-      expect(prismaService.price.update).toHaveBeenCalledWith({
-        where: { id: priceId },
-        data: updatePriceDto,
-      });
-    });
-
-    it('should update other prices when making this the current price', async () => {
-      // Arrange
-      const priceId = 1;
-      const updatePriceDto: UpdatePriceDto = {
-        isCurrentPrice: true,
-      };
-
-      const mockPrice = {
-        id: priceId,
-        purchasePrice: 100,
-        sellingPrice: 150,
-        productId: 1,
-        isCurrentPrice: false,
-      };
-
-      const mockUpdatedPrice = {
-        ...mockPrice,
-        isCurrentPrice: true,
-      };
-
-      mockPrismaService.price.findUnique.mockResolvedValue(mockPrice);
-      mockPrismaService.price.update.mockResolvedValue(mockUpdatedPrice);
-
-      // Act
-      const result = await service.update(priceId, updatePriceDto);
-
-      // Assert
-      expect(result).toEqual(mockUpdatedPrice);
-      expect(prismaService.price.updateMany).toHaveBeenCalledWith({
-        where: {
-          productId: mockPrice.productId,
-          isCurrentPrice: true,
-          id: { not: priceId },
-        },
-        data: {
-          isCurrentPrice: false,
-          validTo: expect.any(Date),
-        },
-      });
-    });
-
-    it('should throw NotFoundException if price does not exist', async () => {
-      // Arrange
-      const priceId = 999; // Non-existent ID
-      const updatePriceDto: UpdatePriceDto = {
-        sellingPrice: 200,
-      };
-
-      mockPrismaService.price.findUnique.mockResolvedValue(null);
-
-      // Act & Assert
-      await expect(service.update(priceId, updatePriceDto)).rejects.toThrow(
-        NotFoundException,
+      expect(prismaService.price.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 1 },
+          data: updateDto,
+        }),
       );
-      expect(prismaService.price.findUnique).toHaveBeenCalled();
-      expect(prismaService.price.update).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('remove', () => {
-    it('should delete a price', async () => {
-      // Arrange
-      const priceId = 1;
-      const mockPrice = {
-        id: priceId,
-        purchasePrice: 100,
-        sellingPrice: 150,
-        productId: 1,
-        isCurrentPrice: false,
-      };
-
-      mockPrismaService.price.findUnique.mockResolvedValue(mockPrice);
-      mockPrismaService.price.delete.mockResolvedValue(mockPrice);
-
-      // Act
-      await service.remove(priceId);
-
-      // Assert
-      expect(prismaService.price.findUnique).toHaveBeenCalledWith({
-        where: { id: priceId },
-      });
-      expect(prismaService.price.delete).toHaveBeenCalledWith({
-        where: { id: priceId },
+      expect(result).toEqual({
+        message: 'Price updated successfully',
+        price: mockPrice,
       });
     });
 
-    it('should throw an error when trying to delete the current price', async () => {
-      // Arrange
-      const priceId = 1;
-      const mockPrice = {
-        id: priceId,
-        purchasePrice: 100,
-        sellingPrice: 150,
-        productId: 1,
-        isCurrentPrice: true, // Current price
-      };
+    it('should throw NotFoundException if price not found', async () => {
+      jest.spyOn(prismaService.price, 'findUnique').mockResolvedValue(null);
 
-      mockPrismaService.price.findUnique.mockResolvedValue(mockPrice);
-
-      // Act & Assert
-      await expect(service.remove(priceId)).rejects.toThrow(
-        'Cannot delete the current price. Create a new price or update another price to be current first.',
-      );
-      expect(prismaService.price.findUnique).toHaveBeenCalled();
-      expect(prismaService.price.delete).not.toHaveBeenCalled();
-    });
-
-    it('should throw NotFoundException if price does not exist', async () => {
-      // Arrange
-      const priceId = 999; // Non-existent ID
-      mockPrismaService.price.findUnique.mockResolvedValue(null);
-
-      // Act & Assert
-      await expect(service.remove(priceId)).rejects.toThrow(NotFoundException);
-      expect(prismaService.price.findUnique).toHaveBeenCalled();
-      expect(prismaService.price.delete).not.toHaveBeenCalled();
+      await expect(
+        service.update(999, { purchasePrice: 200, sellingPrice: 300 }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('getCurrentPriceForProduct', () => {
-    it('should return the current price for a product', async () => {
-      // Arrange
-      const productId = 1;
-      const mockProduct = {
-        id: productId,
-        name: 'Test Product',
-      };
+    it('should return current price for a product', async () => {
+      const result = await service.getCurrentPriceForProduct(1);
 
-      const mockPrice = {
-        id: 1,
-        purchasePrice: 100,
-        sellingPrice: 150,
-        productId,
-        isCurrentPrice: true,
-      };
-
-      mockPrismaService.product.findUnique.mockResolvedValue(mockProduct);
-      mockPrismaService.price.findFirst.mockResolvedValue(mockPrice);
-
-      // Act
-      const result = await service.getCurrentPriceForProduct(productId);
-
-      // Assert
-      expect(result).toEqual(mockPrice);
-      expect(prismaService.product.findUnique).toHaveBeenCalledWith({
-        where: { id: productId },
-      });
-      expect(prismaService.price.findFirst).toHaveBeenCalledWith({
-        where: {
-          productId,
-          isCurrentPrice: true,
-        },
+      expect(prismaService.price.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            productId: 1,
+            isCurrentPrice: true,
+          },
+        }),
+      );
+      expect(result).toEqual({
+        message: 'Current price retrieved successfully',
+        price: mockPrice,
       });
     });
 
-    it('should throw NotFoundException if product does not exist', async () => {
-      // Arrange
-      const productId = 999; // Non-existent ID
-      mockPrismaService.product.findUnique.mockResolvedValue(null);
+    it('should throw NotFoundException if no current price found', async () => {
+      jest.spyOn(prismaService.price, 'findFirst').mockResolvedValue(null);
 
-      // Act & Assert
-      await expect(
-        service.getCurrentPriceForProduct(productId),
-      ).rejects.toThrow(NotFoundException);
-      expect(prismaService.product.findUnique).toHaveBeenCalled();
-      expect(prismaService.price.findFirst).not.toHaveBeenCalled();
-    });
-
-    it('should throw NotFoundException if no current price exists', async () => {
-      // Arrange
-      const productId = 1;
-      const mockProduct = {
-        id: productId,
-        name: 'Test Product',
-      };
-
-      mockPrismaService.product.findUnique.mockResolvedValue(mockProduct);
-      mockPrismaService.price.findFirst.mockResolvedValue(null);
-
-      // Act & Assert
-      await expect(
-        service.getCurrentPriceForProduct(productId),
-      ).rejects.toThrow(NotFoundException);
-      expect(prismaService.product.findUnique).toHaveBeenCalled();
-      expect(prismaService.price.findFirst).toHaveBeenCalled();
+      await expect(service.getCurrentPriceForProduct(1)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

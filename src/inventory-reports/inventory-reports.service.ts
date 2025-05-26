@@ -1,130 +1,277 @@
 import { Injectable } from '@nestjs/common';
-import { GenerateReportDto, ReportType } from './dto/inventory-report.dto';
-import { QueryParamsDto } from './dto/query-params.dto';
+import { Prisma } from '../../generated/prisma';
+import {
+  FullResponse,
+  PaginatedResponse,
+} from '../common/interfaces/response.interface';
+import { PaginationService } from '../common/services/pagination.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { InventoryReportQueryDto, MovementsReportQueryDto } from './dto';
+import {
+  InventoryMovementsReportResponse,
+  InventoryReportResponse,
+  InventorySummaryResponse,
+} from './entities/inventory-report.entity';
+import { InventoryReportTransformer } from './transformers/inventory-report.transformer';
 
+/**
+ * Service responsible for generating various inventory-related reports
+ * Provides functionality for inventory status, sales analysis, and movement tracking
+ */
 @Injectable()
 export class InventoryReportsService {
-  async generateReportQuery(
-    generateReportDto: GenerateReportDto,
-  ): Promise<QueryParamsDto> {
-    const { reportType, supplierId, startDate, endDate, format } =
-      generateReportDto;
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly paginationService: PaginationService,
+    private readonly transformer: InventoryReportTransformer,
+  ) {}
 
-    // Base query for inventory data
-    let query = `
-      SELECT 
-        p.id, 
-        p.name, S
-        p.description, 
-        p.currentStock, 
-        p.minQuantity, 
-        p.maxQuantity, 
-        s.name as supplierName, 
-        pr.purchasePrice, 
-        pr.sellingPrice,
-        CASE 
-          WHEN p.currentStock <= p.minQuantity THEN 'Critical'
-          WHEN p.currentStock <= p.minQuantity * 1.5 THEN 'Low'
-          WHEN p.maxQuantity IS NOT NULL AND p.currentStock >= p.maxQuantity * 0.9 THEN 'High'
-          ELSE 'Normal'
-        END as status
-      FROM products p
-      JOIN suppliers s ON p.supplierId = s.id
-      JOIN prices pr ON p.id = pr.productId AND pr.isCurrentPrice = true
-      WHERE p.isActive = true
-    `;
-
-    // Build query parameters
-    const params: Record<string, any> = {};
-
-    // Add filters based on report type
-    if (reportType === ReportType.CRITICAL) {
-      query += ' AND p.currentStock <= p.minQuantity';
-    }
-
-    // Add supplier filter if provided
-    if (supplierId) {
-      query += ' AND p.supplierId = :supplierId';
-      params.supplierId = parseInt(supplierId, 10);
-    }
-
-    // Add date filters if needed
-    if (startDate) {
-      query += ' AND p.updatedAt >= :startDate';
-      params.startDate = startDate;
-    }
-
-    if (endDate) {
-      query += ' AND p.updatedAt <= :endDate';
-      params.endDate = endDate;
-    }
-
-    // Order by status (critical first) and then by name
-    query +=
-      " ORDER BY CASE WHEN status = 'Critical' THEN 1 WHEN status = 'Low' THEN 2 ELSE 3 END, p.name";
-
-    // Return query and parameters
+  /**
+   * Builds the where clause for inventory report queries
+   */
+  private buildInventoryWhereClause(
+    query: Partial<InventoryReportQueryDto>,
+  ): Prisma.ProductWhereInput {
+    const { minStock, maxStock, status, search } = query;
     return {
-      query,
-      params,
-      metadata: {
-        reportType,
-        format,
-        timestamp: new Date().toISOString(),
-        reportTitle: this.getReportTitle(reportType),
-      },
+      ...(minStock && { currentStock: { gte: minStock } }),
+      ...(maxStock && { currentStock: { lte: maxStock } }),
+      ...(status && { status }),
+      ...(search && {
+        OR: [
+          { name: { contains: search, mode: Prisma.QueryMode.insensitive } },
+          {
+            description: {
+              contains: search,
+              mode: Prisma.QueryMode.insensitive,
+            },
+          },
+        ],
+      }),
     };
   }
 
-  async getInventorySummaryQuery(): Promise<QueryParamsDto> {
-    // Query for count of all products
-    const totalProductsQuery = `
-      SELECT COUNT(*) as totalProducts 
-      FROM products
-      WHERE isActive = true
-    `;
+  /**
+   * Transforms product data into inventory report format
+   */
+  private transformInventoryData(items: any[]): InventoryReportResponse[] {
+    return items.map((item) => {
+      const currentPrice = item.prices[0];
+      return this.transformer.toInventoryReport({
+        productId: item.id.toString(),
+        productName: item.name,
+        currentStock: item.currentStock,
+        minStock: item.minQuantity,
+        maxStock: item.maxQuantity,
+        unitPrice: currentPrice ? Number(currentPrice.sellingPrice) : 0,
+        totalValue: currentPrice
+          ? Number(currentPrice.sellingPrice) * item.currentStock
+          : 0,
+        category: item.description || 'Uncategorized',
+        lastMovement: item.updatedAt,
+      });
+    });
+  }
 
-    // Query for total inventory value
-    const totalValueQuery = `
-      SELECT SUM(p.currentStock * pr.purchasePrice) as totalValue
-      FROM products p
-      JOIN prices pr ON p.id = pr.productId AND pr.isCurrentPrice = true
-      WHERE p.isActive = true
-    `;
+  /**
+   * Generates a paginated inventory report
+   */
+  async getPaginatedInventoryReport(
+    query: InventoryReportQueryDto,
+  ): Promise<PaginatedResponse<InventoryReportResponse>> {
+    const where = this.buildInventoryWhereClause(query);
+    const { page = 1, limit = 10 } = query;
 
-    // Query for critical items count
-    const criticalItemsQuery = `
-      SELECT COUNT(*) as criticalItems
-      FROM products
-      WHERE isActive = true AND currentStock <= minQuantity
-    `;
+    const [items, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        include: {
+          prices: {
+            where: { isCurrentPrice: true },
+            take: 1,
+          },
+        },
+        skip: this.paginationService.getPaginationSkip(page, limit),
+        take: limit,
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.product.count({ where }),
+    ]);
 
-    // Combined query with SQLite's compound queries
-    const combinedQuery = `
-      ${totalProductsQuery};
-      ${totalValueQuery};
-      ${criticalItemsQuery};
-    `;
+    const data = this.transformInventoryData(items);
+    return this.paginationService.createPaginationObject(
+      data,
+      total,
+      page,
+      limit,
+      'Inventory report generated successfully',
+    );
+  }
 
-    return {
-      query: combinedQuery,
-      metadata: {
-        queryType: 'summary',
-        timestamp: new Date().toISOString(),
+  /**
+   * Generates a full inventory report without pagination
+   */
+  async getFullInventoryReport(
+    query: Omit<InventoryReportQueryDto, 'page' | 'limit'>,
+  ): Promise<FullResponse<InventoryReportResponse>> {
+    const where = this.buildInventoryWhereClause(query);
+
+    const items = await this.prisma.product.findMany({
+      where,
+      include: {
+        prices: {
+          where: { isCurrentPrice: true },
+          take: 1,
+        },
       },
+      orderBy: { name: 'asc' },
+    });
+
+    const data = this.transformInventoryData(items);
+    return {
+      data,
+      total: data.length,
+      success: true,
+      message: 'Full inventory report generated successfully',
     };
   }
 
-  private getReportTitle(reportType: ReportType): string {
-    switch (reportType) {
-      case ReportType.GENERAL:
-        return 'General Inventory Report';
-      case ReportType.BY_CATEGORY:
-        return 'Inventory Report by Category';
-      case ReportType.CRITICAL:
-        return 'Critical Inventory Report';
-      default:
-        return 'Inventory Report';
-    }
+  /**
+   * Builds the where clause for movement report queries
+   */
+  private buildMovementsWhereClause(
+    query: Partial<MovementsReportQueryDto>,
+  ): Prisma.InventoryMovementWhereInput {
+    const { startDate, endDate, productId, type, userId } = query;
+    return {
+      ...(startDate && { movementDate: { gte: startDate } }),
+      ...(endDate && { movementDate: { lte: endDate } }),
+      ...(productId && { productId: parseInt(productId, 10) }),
+      ...(type && { type }),
+      ...(userId && { userId }),
+    };
+  }
+
+  /**
+   * Transforms movement data into report format
+   */
+  private transformMovementsData(
+    items: any[],
+  ): InventoryMovementsReportResponse[] {
+    return items.map((item) =>
+      this.transformer.toInventoryMovementsReport({
+        movementId: item.id.toString(),
+        productId: item.productId.toString(),
+        productName: item.product.name,
+        quantity: item.quantity,
+        type: item.type,
+        date: item.movementDate,
+        userId: item.userId,
+        userName: `${item.user.firstName} ${item.user.lastName}`,
+        reason: item.reason || '',
+      }),
+    );
+  }
+
+  /**
+   * Generates a paginated movements report
+   */
+  async getPaginatedMovementsReport(
+    query: MovementsReportQueryDto,
+  ): Promise<PaginatedResponse<InventoryMovementsReportResponse>> {
+    const where = this.buildMovementsWhereClause(query);
+    const { page = 1, limit = 10 } = query;
+
+    const [items, total] = await Promise.all([
+      this.prisma.inventoryMovement.findMany({
+        where,
+        include: {
+          product: true,
+          user: true,
+        },
+        skip: this.paginationService.getPaginationSkip(page, limit),
+        take: limit,
+        orderBy: { movementDate: 'desc' },
+      }),
+      this.prisma.inventoryMovement.count({ where }),
+    ]);
+
+    const data = this.transformMovementsData(items);
+    return this.paginationService.createPaginationObject(
+      data,
+      total,
+      page,
+      limit,
+      'Inventory movements report generated successfully',
+    );
+  }
+
+  /**
+   * Generates a full movements report without pagination
+   */
+  async getFullMovementsReport(
+    query: Omit<MovementsReportQueryDto, 'page' | 'limit'>,
+  ): Promise<FullResponse<InventoryMovementsReportResponse>> {
+    const where = this.buildMovementsWhereClause(query);
+
+    const items = await this.prisma.inventoryMovement.findMany({
+      where,
+      include: {
+        product: true,
+        user: true,
+      },
+      orderBy: { movementDate: 'desc' },
+    });
+
+    const data = this.transformMovementsData(items);
+    return {
+      data,
+      total: data.length,
+      success: true,
+      message: 'Full inventory movements report generated successfully',
+    };
+  }
+
+  /**
+   * Generates a summary of the current inventory status
+   */
+  async getInventorySummary(): Promise<InventorySummaryResponse> {
+    const products = await this.prisma.product.findMany({
+      include: {
+        prices: {
+          where: { isCurrentPrice: true },
+          take: 1,
+        },
+      },
+    });
+
+    const totalProducts = products.length;
+    const totalValue = products.reduce((sum, product) => {
+      const currentPrice = product.prices[0];
+      return (
+        sum +
+        (currentPrice
+          ? Number(currentPrice.sellingPrice) * product.currentStock
+          : 0)
+      );
+    }, 0);
+
+    const lowStockCount = products.filter(
+      (p) => p.currentStock > 0 && p.currentStock < p.minQuantity,
+    ).length;
+    const outOfStockCount = products.filter((p) => p.currentStock <= 0).length;
+    const overStockCount = products.filter((p) =>
+      p.maxQuantity ? p.currentStock > p.maxQuantity : false,
+    ).length;
+    const averageValue = totalProducts > 0 ? totalValue / totalProducts : 0;
+
+    return this.transformer.toInventorySummary({
+      totalProducts,
+      totalValue,
+      lowStockCount,
+      outOfStockCount,
+      overStockCount,
+      averageValue,
+    });
   }
 }

@@ -1,13 +1,27 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { PaginationService } from '../common/services/pagination.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePriceDto, FilterPriceDto, UpdatePriceDto } from './dto';
 
+/**
+ * Service responsible for managing product prices in the system
+ * Handles price creation, updates, and historical price tracking
+ */
 @Injectable()
 export class PricesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly paginationService: PaginationService,
+  ) {}
 
+  /**
+   * Creates a new price record for a product
+   * If marked as current price, automatically updates previous current price
+   * @param createPriceDto - Data for creating the new price
+   * @returns Newly created price record
+   * @throws NotFoundException if product does not exist
+   */
   async create(createPriceDto: CreatePriceDto) {
-    // First, check if the product exists
     const productExists = await this.prisma.product.findUnique({
       where: { id: createPriceDto.productId },
     });
@@ -18,7 +32,6 @@ export class PricesService {
       );
     }
 
-    // If this is set as the current price, update any existing current prices
     if (createPriceDto.isCurrentPrice) {
       await this.prisma.price.updateMany({
         where: {
@@ -32,12 +45,16 @@ export class PricesService {
       });
     }
 
-    // Create the new price
     return this.prisma.price.create({
       data: createPriceDto,
     });
   }
 
+  /**
+   * Retrieves all prices with optional filtering and pagination
+   * @param filters - Optional filters for product ID, current price status, and pagination
+   * @returns Paginated list of prices with their associated products
+   */
   async findAll(filters: FilterPriceDto = {}) {
     const { productId, isCurrentPrice, page = 1, limit = 10 } = filters;
 
@@ -51,16 +68,11 @@ export class PricesService {
       where.isCurrentPrice = isCurrentPrice;
     }
 
-    // Calculate skip for pagination
-    const skip = (page - 1) * limit;
-
-    // Get total price count for these filters
     const total = await this.prisma.price.count({ where });
 
-    // Get paginated prices
     const prices = await this.prisma.price.findMany({
       where,
-      skip,
+      skip: this.paginationService.getPaginationSkip(page, limit),
       take: limit,
       include: {
         product: true,
@@ -70,22 +82,21 @@ export class PricesService {
       },
     });
 
-    // Calculate total pages
-    const totalPages = Math.ceil(total / limit);
-
-    return {
-      data: prices,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1,
-      },
-    };
+    return this.paginationService.createPaginationObject(
+      prices,
+      total,
+      page,
+      limit,
+      'Prices retrieved successfully',
+    );
   }
 
+  /**
+   * Retrieves a specific price record by ID
+   * @param id - ID of the price to retrieve
+   * @returns Price record with associated product and discounts
+   * @throws NotFoundException if price does not exist
+   */
   async findOne(id: number) {
     const price = await this.prisma.price.findUnique({
       where: { id },
@@ -102,8 +113,15 @@ export class PricesService {
     return price;
   }
 
+  /**
+   * Updates an existing price record
+   * If updating to current price, automatically updates previous current price
+   * @param id - ID of the price to update
+   * @param updatePriceDto - Data for updating the price
+   * @returns Updated price record
+   * @throws NotFoundException if price does not exist
+   */
   async update(id: number, updatePriceDto: UpdatePriceDto) {
-    // Check if the price exists
     const existingPrice = await this.prisma.price.findUnique({
       where: { id },
     });
@@ -112,7 +130,6 @@ export class PricesService {
       throw new NotFoundException(`Price with ID ${id} not found`);
     }
 
-    // If updating to make this the current price, update any other current prices
     if (updatePriceDto.isCurrentPrice) {
       await this.prisma.price.updateMany({
         where: {
@@ -127,15 +144,19 @@ export class PricesService {
       });
     }
 
-    // Update the price
     return this.prisma.price.update({
       where: { id },
       data: updatePriceDto,
     });
   }
 
+  /**
+   * Removes a price record from the system
+   * @param id - ID of the price to remove
+   * @throws NotFoundException if price does not exist
+   * @throws Error if attempting to delete the current price
+   */
   async remove(id: number) {
-    // Check if the price exists
     const price = await this.prisma.price.findUnique({
       where: { id },
     });
@@ -144,19 +165,23 @@ export class PricesService {
       throw new NotFoundException(`Price with ID ${id} not found`);
     }
 
-    // Check if this is the current price
     if (price.isCurrentPrice) {
       throw new Error(
         'Cannot delete the current price. Create a new price or update another price to be current first.',
       );
     }
 
-    // Delete the price
     await this.prisma.price.delete({
       where: { id },
     });
   }
 
+  /**
+   * Retrieves the current price for a specific product
+   * @param productId - ID of the product
+   * @returns Current price record for the product
+   * @throws NotFoundException if product or current price not found
+   */
   async getCurrentPriceForProduct(productId: number) {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },

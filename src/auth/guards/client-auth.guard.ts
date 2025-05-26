@@ -1,6 +1,6 @@
 import {
-  Injectable,
   ExecutionContext,
+  Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -12,7 +12,6 @@ export class ClientAuthGuard extends AuthGuard('jwt') {
   }
 
   handleRequest(err: any, user: any, _info: any) {
-    // Allow only client tokens
     if (err || !user) {
       throw err || new UnauthorizedException('Authentication required');
     }

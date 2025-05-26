@@ -2,18 +2,22 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsBoolean, IsNotEmpty } from 'class-validator';
 
 /**
- * Toggle Active Data Transfer Object
+ * Toggle Active Client Data Transfer Object
  *
- * DTO for activating or deactivating a client in the system.
- * This operation can only be performed by administrators.
+ * This DTO is used to activate or deactivate a client account:
+ * - true: activates the client account
+ * - false: deactivates the client account (soft delete)
+ * - Used in admin operations to manage client access
  */
 export class ToggleActiveDto {
   @ApiProperty({
     example: false,
     description:
-      'Active or inactive status of the client (true = active, false = inactive)',
+      'Set to true to activate the client account, false to deactivate it',
+    type: Boolean,
+    required: true,
   })
-  @IsBoolean({ message: 'isActive must be a boolean' })
-  @IsNotEmpty({ message: 'isActive is required' })
+  @IsBoolean({ message: 'isActive must be a boolean value (true/false)' })
+  @IsNotEmpty({ message: 'isActive status is required' })
   isActive: boolean;
 }

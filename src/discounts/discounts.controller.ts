@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiOperation,
   ApiParam,
   ApiQuery,
@@ -27,6 +28,7 @@ import { CreateDiscountDto, FilterDiscountDto, UpdateDiscountDto } from './dto';
 @ApiTags('Discounts')
 @Controller('discounts')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@ApiBearerAuth()
 export class DiscountsController {
   constructor(
     private readonly discountsService: DiscountsService,

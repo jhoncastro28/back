@@ -3,23 +3,102 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { PaginationService } from '../common/services/pagination.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AdjustStockDto,
   CreateProductDto,
+  CreateProductWithPriceDto,
   FilterProductDto,
+  PaginatedProductResponse,
+  ProductResponse,
   StockAdjustmentType,
   UpdateProductDto,
 } from './dto';
 
+/**
+ * Interface representing a product with its related entities
+ * Used for internal service operations and mapping
+ */
+interface ProductWithRelations {
+  id: number;
+  name: string;
+  description?: string;
+  minQuantity: number;
+  maxQuantity: number;
+  currentStock: number;
+  isActive: boolean;
+  supplierId: number;
+  createdAt: Date;
+  updatedAt: Date;
+  supplier?: {
+    id: number;
+    name: string;
+    email: string;
+  };
+  prices?: Array<{
+    id: number;
+    purchasePrice: any;
+    sellingPrice: any;
+    isCurrentPrice: boolean;
+  }>;
+}
+
+/**
+ * Service responsible for managing products in the inventory system
+ * Handles product creation, updates, stock management, and reporting
+ */
 @Injectable()
 export class ProductsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly paginationService: PaginationService,
+  ) {}
 
-  async create(createProductDto: CreateProductDto) {
+  /**
+   * Maps a product entity with relations to a standardized response format
+   * Handles price conversion and optional supplier information
+   * @param product - Product entity with optional relations
+   * @returns Formatted product response
+   * @private
+   */
+  private mapProductToResponse(product: ProductWithRelations): ProductResponse {
+    return {
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      minQuantity: product.minQuantity,
+      maxQuantity: product.maxQuantity,
+      currentStock: product.currentStock,
+      isActive: product.isActive,
+      supplierId: product.supplierId,
+      createdAt: product.createdAt,
+      updatedAt: product.updatedAt,
+      supplier: product.supplier
+        ? {
+            id: product.supplier.id,
+            name: product.supplier.name,
+            email: product.supplier.email,
+          }
+        : undefined,
+      prices: product.prices?.map((price) => ({
+        id: price.id,
+        purchasePrice: Number(price.purchasePrice),
+        sellingPrice: Number(price.sellingPrice),
+        isCurrentPrice: price.isCurrentPrice,
+      })),
+    };
+  }
+
+  /**
+   * Creates a new product with initial price information
+   * @param createProductDto - Data for creating the product and its initial price
+   * @returns Newly created product with price information
+   * @throws NotFoundException if supplier does not exist
+   */
+  async create(createProductDto: CreateProductDto): Promise<ProductResponse> {
     const { purchasePrice, sellingPrice, ...productData } = createProductDto;
 
-    // First, check if the supplier exists
     const supplierExists = await this.prisma.supplier.findUnique({
       where: { id: createProductDto.supplierId },
     });
@@ -30,16 +109,18 @@ export class ProductsService {
       );
     }
 
-    // Create the product and its initial price in a transaction
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const product = await tx.product.create({
         data: {
           ...productData,
           currentStock: 0,
         },
+        include: {
+          supplier: true,
+          prices: true,
+        },
       });
 
-      // Create the initial price
       await tx.price.create({
         data: {
           purchasePrice,
@@ -51,11 +132,19 @@ export class ProductsService {
 
       return product;
     });
+
+    return this.mapProductToResponse(result);
   }
 
-  async findAll(filters: FilterProductDto = {}) {
+  /**
+   * Retrieves all products with optional filtering and pagination
+   * @param filters - Optional filters for name, active status, supplier, and pagination
+   * @returns Paginated list of products with their current prices
+   */
+  async findAll(
+    filters: FilterProductDto = {},
+  ): Promise<PaginatedProductResponse> {
     const { name, isActive, supplierId, page = 1, limit = 10 } = filters;
-
     const where: any = {};
 
     if (name) {
@@ -70,19 +159,14 @@ export class ProductsService {
     }
 
     if (supplierId) {
-      where.supplierId = parseInt(supplierId, 10);
+      where.supplierId = supplierId;
     }
 
-    // Calculate skip for pagination
-    const skip = (page - 1) * limit;
-
-    // Get total product count for these filters
     const total = await this.prisma.product.count({ where });
 
-    // Get paginated products
     const products = await this.prisma.product.findMany({
       where,
-      skip,
+      skip: this.paginationService.getPaginationSkip(page, limit),
       take: limit,
       include: {
         supplier: true,
@@ -95,23 +179,32 @@ export class ProductsService {
       },
     });
 
-    // Calculate total pages
-    const totalPages = Math.ceil(total / limit);
+    const mappedProducts = products.map((product) =>
+      this.mapProductToResponse(product),
+    );
+
+    const paginatedResponse = this.paginationService.createPaginationObject(
+      mappedProducts,
+      total,
+      page,
+      limit,
+      'Products retrieved successfully',
+    );
 
     return {
-      data: products,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1,
-      },
+      ...paginatedResponse,
+      message: paginatedResponse.message || 'Products retrieved successfully',
+      success: true,
     };
   }
 
-  async findOne(id: number) {
+  /**
+   * Retrieves a specific product by ID with its complete price history
+   * @param id - ID of the product to retrieve
+   * @returns Product with supplier and price history
+   * @throws NotFoundException if product does not exist
+   */
+  async findOne(id: number): Promise<ProductResponse> {
     const product = await this.prisma.product.findUnique({
       where: { id },
       include: {
@@ -128,13 +221,22 @@ export class ProductsService {
       throw new NotFoundException(`Product with ID ${id} not found`);
     }
 
-    return product;
+    return this.mapProductToResponse(product);
   }
 
-  async update(id: number, updateProductDto: UpdateProductDto) {
+  /**
+   * Updates a product and optionally its current price
+   * @param id - ID of the product to update
+   * @param updateProductDto - Data for updating the product and optionally its price
+   * @returns Updated product with latest information
+   * @throws NotFoundException if product or supplier does not exist
+   */
+  async update(
+    id: number,
+    updateProductDto: UpdateProductDto,
+  ): Promise<ProductResponse> {
     const { purchasePrice, sellingPrice, ...productData } = updateProductDto;
 
-    // Check if the product exists
     const existingProduct = await this.prisma.product.findUnique({
       where: { id },
     });
@@ -143,7 +245,6 @@ export class ProductsService {
       throw new NotFoundException(`Product with ID ${id} not found`);
     }
 
-    // If a supplier is specified, check if it exists
     if (productData.supplierId) {
       const supplierExists = await this.prisma.supplier.findUnique({
         where: { id: productData.supplierId },
@@ -156,16 +257,17 @@ export class ProductsService {
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      // Update the product
+    const result = await this.prisma.$transaction(async (tx) => {
       const updatedProduct = await tx.product.update({
         where: { id },
         data: productData,
+        include: {
+          supplier: true,
+          prices: true,
+        },
       });
 
-      // If price information is provided, update prices
       if (purchasePrice !== undefined || sellingPrice !== undefined) {
-        // Get the current price
         const currentPrice = await tx.price.findFirst({
           where: {
             productId: id,
@@ -173,7 +275,6 @@ export class ProductsService {
           },
         });
 
-        // If there's a current price, mark it as not current
         if (currentPrice) {
           await tx.price.update({
             where: { id: currentPrice.id },
@@ -184,7 +285,6 @@ export class ProductsService {
           });
         }
 
-        // Create the new price
         await tx.price.create({
           data: {
             purchasePrice: purchasePrice ?? currentPrice?.purchasePrice,
@@ -197,16 +297,17 @@ export class ProductsService {
 
       return updatedProduct;
     });
+
+    return this.mapProductToResponse(result);
   }
 
   /**
    * Deactivates a product (logical deletion)
-   * Instead of physically removing records from the database, we mark them as inactive
-   * This preserves historical data and relationships while preventing the product from
-   * being displayed in active product listings
+   * Preserves historical data while preventing the product from being displayed in active listings
+   * @param id - ID of the product to deactivate
+   * @throws NotFoundException if product does not exist
    */
   async deactivate(id: number): Promise<void> {
-    // Check if the product exists
     const product = await this.prisma.product.findUnique({
       where: { id },
     });
@@ -215,7 +316,6 @@ export class ProductsService {
       throw new NotFoundException(`Product with ID ${id} not found`);
     }
 
-    // Instead of physically deleting, mark as inactive
     await this.prisma.product.update({
       where: { id },
       data: { isActive: false },
@@ -224,10 +324,11 @@ export class ProductsService {
 
   /**
    * Activates a previously deactivated product
-   * This makes the product available again in active product listings
+   * Makes the product available again in active listings
+   * @param id - ID of the product to activate
+   * @throws NotFoundException if product does not exist
    */
   async activate(id: number): Promise<void> {
-    // Check if the product exists
     const product = await this.prisma.product.findUnique({
       where: { id },
     });
@@ -236,7 +337,6 @@ export class ProductsService {
       throw new NotFoundException(`Product with ID ${id} not found`);
     }
 
-    // Mark as active
     await this.prisma.product.update({
       where: { id },
       data: { isActive: true },
@@ -244,13 +344,13 @@ export class ProductsService {
   }
 
   /**
-   * Get products with stock levels below their minimum quantity
+   * Retrieves products with stock levels below their minimum quantity
+   * @returns List of products with low stock and their supplier information
    */
   async getLowStockProducts() {
     const productsWithLowStock = await this.prisma.product.findMany({
       where: {
         isActive: true,
-        // Use a raw query to check if currentStock < minQuantity
         currentStock: {
           lt: this.prisma.product.fields.minQuantity,
         },
@@ -273,7 +373,6 @@ export class ProductsService {
         },
       },
       orderBy: {
-        // Sort by how critical the shortage is (lowest stock first)
         currentStock: 'asc',
       },
     });
@@ -285,10 +384,12 @@ export class ProductsService {
   }
 
   /**
-   * Get price history for a specific product
+   * Retrieves price history for a specific product
+   * @param id - ID of the product
+   * @returns Complete price history ordered by date
+   * @throws NotFoundException if product does not exist
    */
   async getPriceHistory(id: number) {
-    // Check if the product exists
     const product = await this.prisma.product.findUnique({
       where: { id },
       select: { id: true, name: true },
@@ -298,7 +399,6 @@ export class ProductsService {
       throw new NotFoundException(`Product with ID ${id} not found`);
     }
 
-    // Get all prices for this product, ordered by creation date (newest first)
     const priceHistory = await this.prisma.price.findMany({
       where: { productId: id },
       orderBy: { createdAt: 'desc' },
@@ -314,13 +414,16 @@ export class ProductsService {
   }
 
   /**
-   * Manually adjust the stock level of a product
-   * Creates an inventory movement record to track the adjustment
+   * Manually adjusts the stock level of a product
+   * @param id - ID of the product
+   * @param adjustStockDto - Data for the stock adjustment
+   * @returns Updated product information
+   * @throws NotFoundException if product does not exist
+   * @throws BadRequestException if adjustment would result in negative stock
    */
   async adjustStock(id: number, adjustStockDto: AdjustStockDto) {
     const { type, quantity, reason, notes } = adjustStockDto;
 
-    // Check if the product exists
     const product = await this.prisma.product.findUnique({
       where: { id },
     });
@@ -329,20 +432,16 @@ export class ProductsService {
       throw new NotFoundException(`Product with ID ${id} not found`);
     }
 
-    // Calculate the actual quantity change based on adjustment type
     const stockChange =
       type === StockAdjustmentType.INCREASE ? quantity : -quantity;
 
-    // Check for negative stock
     if (product.currentStock + stockChange < 0) {
       throw new BadRequestException(
         `Cannot decrease stock below zero. Current stock: ${product.currentStock}`,
       );
     }
 
-    // Use a transaction to ensure both the movement and stock update succeed or fail together
     return this.prisma.$transaction(async (tx) => {
-      // Update the product stock
       const updatedProduct = await tx.product.update({
         where: { id },
         data: {
@@ -352,7 +451,6 @@ export class ProductsService {
         },
       });
 
-      // Create a manual inventory movement record to track this adjustment
       await tx.inventoryMovement.create({
         data: {
           type: type === StockAdjustmentType.INCREASE ? 'ENTRY' : 'EXIT',
@@ -360,9 +458,7 @@ export class ProductsService {
           reason: reason || 'Manual stock adjustment',
           notes,
           productId: id,
-          // Use system administrator as default for manual adjustments
-          // In a real system, you would get this from the authenticated user
-          userId: '1', // Replace with dynamic user ID in production
+          userId: '1',
           movementDate: new Date(),
         },
       });
@@ -374,6 +470,14 @@ export class ProductsService {
     });
   }
 
+  /**
+   * Updates the stock quantity of a product
+   * @param id - ID of the product
+   * @param quantity - Quantity to add or subtract from current stock
+   * @returns Updated product information
+   * @throws NotFoundException if product does not exist
+   * @throws Error if adjustment would result in negative stock
+   */
   async updateStock(id: number, quantity: number) {
     const product = await this.prisma.product.findUnique({
       where: { id },
@@ -398,12 +502,13 @@ export class ProductsService {
   }
 
   /**
-   * Generate a comprehensive stock status report for all products
-   * Includes alerts for products with low stock (below minQuantity) and high stock (above maxQuantity)
+   * Generates a comprehensive stock status report
+   * Includes categorization of products by stock level and value calculations
+   * @returns Detailed report of stock status across all products
+   * @throws BadRequestException if report generation fails
    */
   async generateStockStatusReport() {
     try {
-      // Get all active products with their current stock information
       const products = await this.prisma.product.findMany({
         where: {
           isActive: true,
@@ -430,7 +535,6 @@ export class ProductsService {
         },
       });
 
-      // Categorize products by stock status
       const lowStockProducts = products.filter(
         (product) => product.currentStock < product.minQuantity,
       );
@@ -448,7 +552,6 @@ export class ProductsService {
             product.currentStock <= product.maxQuantity),
       );
 
-      // Calculate summary statistics
       const totalProducts = products.length;
       const totalStock = products.reduce(
         (sum, product) => sum + product.currentStock,
@@ -456,7 +559,6 @@ export class ProductsService {
       );
       const averageStock = totalProducts > 0 ? totalStock / totalProducts : 0;
 
-      // Calculate stock value
       let totalStockValue = 0;
       products.forEach((product) => {
         const currentPrice = product.prices[0];
@@ -493,12 +595,14 @@ export class ProductsService {
   }
 
   /**
-   * Generate a sales performance report for products
-   * Includes top-selling products, revenue analysis, and trends
+   * Generates a sales performance report for products
+   * @param dateFrom - Start date for the report period
+   * @param dateTo - End date for the report period
+   * @returns Detailed sales analysis including top products and revenue metrics
+   * @throws BadRequestException if report generation fails or dates are invalid
    */
   async generateSalesPerformanceReport(dateFrom?: Date, dateTo?: Date) {
     try {
-      // Set default date range if not provided (last 30 days)
       const now = new Date();
       const defaultDateFrom = new Date();
       defaultDateFrom.setDate(now.getDate() - 30);
@@ -510,7 +614,6 @@ export class ProductsService {
         throw new BadRequestException('Start date must be before end date');
       }
 
-      // Get all sale items within the date range
       const saleItems = await this.prisma.saleDetail.findMany({
         where: {
           sale: {
@@ -532,7 +635,6 @@ export class ProductsService {
         },
       });
 
-      // Group by product to calculate sales metrics
       const productSales: Record<
         number,
         {
@@ -564,7 +666,6 @@ export class ProductsService {
         productSales[productId].salesCount++;
       });
 
-      // Calculate average price for each product
       Object.values(productSales).forEach((product) => {
         product.averagePrice =
           product.totalQuantity > 0
@@ -572,26 +673,21 @@ export class ProductsService {
             : 0;
       });
 
-      // Convert to array for sorting
       const productsArray = Object.values(productSales);
 
-      // Get top products by quantity sold
       const topProductsByQuantity = [...productsArray]
         .sort((a, b) => b.totalQuantity - a.totalQuantity)
         .slice(0, 10);
 
-      // Get top products by revenue
       const topProductsByRevenue = [...productsArray]
         .sort((a, b) => b.totalRevenue - a.totalRevenue)
         .slice(0, 10);
 
-      // Calculate total revenue
       const totalRevenue = productsArray.reduce(
         (sum, product) => sum + product.totalRevenue,
         0,
       );
 
-      // Calculate total quantity sold
       const totalQuantitySold = productsArray.reduce(
         (sum, product) => sum + product.totalQuantity,
         0,
@@ -624,12 +720,14 @@ export class ProductsService {
   }
 
   /**
-   * Generate a report of price changes across products
-   * Useful for tracking price trends and monitoring inflation
+   * Generates a report of price changes across products
+   * @param dateFrom - Start date for the report period
+   * @param dateTo - End date for the report period
+   * @returns Analysis of price trends and changes
+   * @throws BadRequestException if report generation fails or dates are invalid
    */
   async generatePriceChangesReport(dateFrom?: Date, dateTo?: Date) {
     try {
-      // Set default date range if not provided (last 90 days)
       const now = new Date();
       const defaultDateFrom = new Date();
       defaultDateFrom.setDate(now.getDate() - 90);
@@ -641,7 +739,6 @@ export class ProductsService {
         throw new BadRequestException('Start date must be before end date');
       }
 
-      // Get all price changes within the date range
       const priceChanges = await this.prisma.price.findMany({
         where: {
           createdAt: {
@@ -657,7 +754,6 @@ export class ProductsService {
         },
       });
 
-      // Group price changes by product
       const productPriceChanges: Record<
         number,
         {
@@ -682,7 +778,6 @@ export class ProductsService {
         }
       > = {};
 
-      // First pass to collect all price changes by product
       priceChanges.forEach((price) => {
         const productId = price.productId;
         if (!productPriceChanges[productId]) {
@@ -707,14 +802,11 @@ export class ProductsService {
         });
       });
 
-      // Second pass to calculate price changes and percentages
       Object.values(productPriceChanges).forEach((product) => {
-        // Sort price changes by date (oldest first)
         product.priceChanges.sort(
           (a, b) => a.date.getTime() - b.date.getTime(),
         );
 
-        // Set initial and latest prices
         if (product.priceChanges.length > 0) {
           product.initialPurchasePrice = product.priceChanges[0].purchasePrice;
           product.initialSellingPrice = product.priceChanges[0].sellingPrice;
@@ -724,7 +816,6 @@ export class ProductsService {
           product.latestSellingPrice =
             product.priceChanges[product.priceChanges.length - 1].sellingPrice;
 
-          // Calculate overall percentage changes
           product.purchasePriceChangePercent =
             product.initialPurchasePrice > 0
               ? ((product.latestPurchasePrice - product.initialPurchasePrice) /
@@ -740,7 +831,6 @@ export class ProductsService {
               : 0;
         }
 
-        // Calculate changes between consecutive prices
         for (let i = 1; i < product.priceChanges.length; i++) {
           const current = product.priceChanges[i];
           const previous = product.priceChanges[i - 1];
@@ -762,12 +852,10 @@ export class ProductsService {
         }
       });
 
-      // Convert to array and sort by highest price increase percentage
       const productsWithPriceChanges = Object.values(productPriceChanges).sort(
         (a, b) => b.sellingPriceChangePercent - a.sellingPriceChangePercent,
       );
 
-      // Calculate average price changes across all products
       let totalPurchasePriceChangePercent = 0;
       let totalSellingPriceChangePercent = 0;
       const productCount = productsWithPriceChanges.length;
@@ -807,5 +895,148 @@ export class ProductsService {
         'Error generating price changes report: ' + error.message,
       );
     }
+  }
+
+  /**
+   * Creates a new product with optional price and discount information
+   * @param createProductDto - Data for creating the product with optional price and discount
+   * @returns Newly created product with price and discount information
+   */
+  async createWithPrice(
+    createProductDto: CreateProductWithPriceDto,
+  ): Promise<ProductResponse> {
+    const { price, discount, ...productData } = createProductDto;
+
+    const supplierExists = await this.prisma.supplier.findUnique({
+      where: { id: createProductDto.supplierId },
+    });
+
+    if (!supplierExists) {
+      throw new NotFoundException(
+        `Supplier with ID ${createProductDto.supplierId} not found`,
+      );
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Create the product
+      const product = await tx.product.create({
+        data: {
+          ...productData,
+          currentStock: 0,
+        },
+        include: {
+          supplier: true,
+          prices: true,
+        },
+      });
+
+      // If price information is provided, create the price
+      if (price) {
+        const newPrice = await tx.price.create({
+          data: {
+            purchasePrice: price.purchasePrice,
+            sellingPrice: price.sellingPrice,
+            isCurrentPrice: price.isCurrentPrice ?? true,
+            productId: product.id,
+          },
+        });
+
+        // If discount information is provided, create the discount
+        if (discount) {
+          await tx.discount.create({
+            data: {
+              ...discount,
+              priceId: newPrice.id,
+            },
+          });
+        }
+      }
+
+      return product;
+    });
+
+    return this.mapProductToResponse(result);
+  }
+
+  /**
+   * Retrieves a product with its current price and active discounts
+   * @param id - Product ID
+   * @returns Product with price and discount information
+   */
+  async findOneWithPriceAndDiscount(id: number): Promise<
+    ProductResponse & {
+      currentPrice?: {
+        id: number;
+        purchasePrice: number;
+        sellingPrice: number;
+        discounts: Array<{
+          id: number;
+          name: string;
+          type: string;
+          value: number;
+          startDate: Date;
+          endDate?: Date;
+        }>;
+      };
+    }
+  > {
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      include: {
+        supplier: true,
+        prices: {
+          where: {
+            isCurrentPrice: true,
+          },
+          include: {
+            discounts: {
+              where: {
+                isActive: true,
+                startDate: {
+                  lte: new Date(),
+                },
+                OR: [
+                  {
+                    endDate: null,
+                  },
+                  {
+                    endDate: {
+                      gte: new Date(),
+                    },
+                  },
+                ],
+              },
+            },
+          },
+          take: 1,
+        },
+      },
+    });
+
+    if (!product) {
+      throw new NotFoundException(`Product with ID ${id} not found`);
+    }
+
+    const baseResponse = this.mapProductToResponse(product);
+    const currentPrice = product.prices[0];
+
+    return {
+      ...baseResponse,
+      currentPrice: currentPrice
+        ? {
+            id: currentPrice.id,
+            purchasePrice: Number(currentPrice.purchasePrice),
+            sellingPrice: Number(currentPrice.sellingPrice),
+            discounts: currentPrice.discounts.map((discount) => ({
+              id: discount.id,
+              name: discount.name,
+              type: discount.type,
+              value: Number(discount.value),
+              startDate: discount.startDate,
+              endDate: discount.endDate,
+            })),
+          }
+        : undefined,
+    };
   }
 }

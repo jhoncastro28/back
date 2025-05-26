@@ -1,36 +1,89 @@
 import {
-  Injectable,
-  NotFoundException,
   BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import { PaginationService } from '../common/services/pagination.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateSupplierDto, UpdateSupplierDto, SearchSupplierDto } from './dto';
-import { Prisma } from '../../generated/prisma';
+import { CreateSupplierDto, SearchSupplierDto, UpdateSupplierDto } from './dto';
+import {
+  ISupplierListResponse,
+  ISupplierResponse,
+} from './interfaces/supplier.interface';
 
+/**
+ * Service responsible for managing supplier operations
+ * Handles supplier creation, updates, deactivation, and reactivation
+ */
 @Injectable()
 export class SuppliersService {
-  constructor(private prisma: PrismaService) {}
+  private readonly DEFAULT_SUPPLIER_INCLUDE = {
+    products: {
+      where: { isActive: true },
+      select: {
+        id: true,
+        name: true,
+        currentStock: true,
+      },
+    },
+    _count: {
+      select: {
+        products: true,
+        inventoryMovements: true,
+      },
+    },
+  } as const;
 
-  async create(createSupplierDto: CreateSupplierDto) {
+  private readonly SUPPLIER_DETAIL_INCLUDE = {
+    products: {
+      where: { isActive: true },
+      include: {
+        prices: {
+          where: { isCurrentPrice: true },
+          select: {
+            purchasePrice: true,
+            sellingPrice: true,
+          },
+        },
+      },
+    },
+    inventoryMovements: {
+      take: 10,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        product: { select: { name: true } },
+        user: { select: { firstName: true, lastName: true } },
+      },
+    },
+    _count: {
+      select: {
+        products: true,
+        inventoryMovements: true,
+      },
+    },
+  } as const;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly paginationService: PaginationService,
+  ) {}
+
+  /**
+   * Creates a new supplier in the system
+   * @param createSupplierDto - Data for creating the supplier
+   * @returns Created supplier with associated products count
+   * @throws BadRequestException if supplier with same information exists
+   * @throws InternalServerErrorException for unexpected errors
+   */
+  async create(
+    createSupplierDto: CreateSupplierDto,
+  ): Promise<ISupplierResponse> {
     try {
       const supplier = await this.prisma.supplier.create({
         data: createSupplierDto,
-        include: {
-          products: {
-            where: { isActive: true },
-            select: {
-              id: true,
-              name: true,
-              currentStock: true,
-            },
-          },
-          _count: {
-            select: {
-              products: true,
-              inventoryMovements: true,
-            },
-          },
-        },
+        include: this.DEFAULT_SUPPLIER_INCLUDE,
       });
 
       return {
@@ -39,27 +92,170 @@ export class SuppliersService {
         data: supplier,
       };
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        throw new BadRequestException(
-          'Error creating supplier: Invalid data provided',
-        );
-      }
-      throw error;
+      this.handlePrismaError(error);
     }
   }
 
-  async findAll(query: SearchSupplierDto) {
-    const { isActive, search, page = 1, limit = 10 } = query;
-    const skip = (page - 1) * limit;
+  /**
+   * Retrieves all suppliers with optional filtering and pagination
+   * @param query - Search parameters including active status, search term, and pagination
+   * @returns Paginated list of suppliers with their associated products
+   * @throws InternalServerErrorException for unexpected errors
+   */
+  async findAll(query: SearchSupplierDto): Promise<ISupplierListResponse> {
+    try {
+      const where = this.buildSupplierSearchQuery(query);
+      const { page = 1, limit = 10 } = query;
+      const skip = this.paginationService.getPaginationSkip(page, limit);
 
-    const where: Prisma.SupplierWhereInput = {};
+      const [suppliers, total] = await Promise.all([
+        this.prisma.supplier.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+          include: this.DEFAULT_SUPPLIER_INCLUDE,
+        }),
+        this.prisma.supplier.count({ where }),
+      ]);
 
-    // Filter by active status
-    if (isActive !== undefined) {
-      where.isActive = isActive;
+      return this.paginationService.createPaginationObject(
+        suppliers,
+        total,
+        page,
+        limit,
+        'Suppliers retrieved successfully',
+      );
+    } catch (error) {
+      this.handlePrismaError(error);
     }
+  }
 
-    // Search functionality
+  /**
+   * Retrieves a specific supplier by ID with detailed information
+   * @param id - ID of the supplier to retrieve
+   * @returns Supplier with products, prices, and recent inventory movements
+   * @throws NotFoundException if supplier doesn't exist
+   * @throws InternalServerErrorException for unexpected errors
+   */
+  async findOne(id: number): Promise<ISupplierResponse> {
+    try {
+      const supplier = await this.prisma.supplier.findUnique({
+        where: { id },
+        include: this.SUPPLIER_DETAIL_INCLUDE,
+      });
+
+      if (!supplier) {
+        throw new NotFoundException(`Supplier with ID ${id} not found`);
+      }
+
+      return {
+        success: true,
+        data: supplier,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      this.handlePrismaError(error);
+    }
+  }
+
+  /**
+   * Updates a supplier's information
+   * @param id - ID of the supplier to update
+   * @param updateSupplierDto - Data for updating the supplier
+   * @returns Updated supplier with associated products
+   * @throws NotFoundException if supplier doesn't exist
+   * @throws BadRequestException if update data is invalid
+   * @throws InternalServerErrorException for unexpected errors
+   */
+  async update(
+    id: number,
+    updateSupplierDto: UpdateSupplierDto,
+  ): Promise<ISupplierResponse> {
+    try {
+      const supplier = await this.prisma.supplier.update({
+        where: { id },
+        data: updateSupplierDto,
+        include: this.DEFAULT_SUPPLIER_INCLUDE,
+      });
+
+      return {
+        success: true,
+        message: 'Supplier updated successfully',
+        data: supplier,
+      };
+    } catch (error) {
+      this.handlePrismaError(error);
+    }
+  }
+
+  /**
+   * Toggles a supplier's active status
+   * @param id - ID of the supplier to toggle
+   * @param activate - Boolean indicating whether to activate or deactivate the supplier
+   * @returns Updated supplier information
+   * @throws NotFoundException if supplier doesn't exist
+   * @throws BadRequestException if supplier has active products when deactivating
+   * @throws InternalServerErrorException for unexpected errors
+   */
+  async toggleActive(
+    id: number,
+    activate: boolean,
+  ): Promise<ISupplierResponse> {
+    try {
+      if (!activate) {
+        const hasActiveProducts = await this.checkForActiveProducts(id);
+        if (hasActiveProducts) {
+          return {
+            success: false,
+            message: `Cannot deactivate supplier. There are ${hasActiveProducts} active products associated with this supplier.`,
+            data: null,
+          };
+        }
+      }
+
+      const supplier = await this.prisma.supplier.update({
+        where: { id },
+        data: { isActive: activate },
+        select: {
+          id: true,
+          name: true,
+          isActive: true,
+          contactName: true,
+          email: true,
+          phoneNumber: true,
+          address: true,
+          documentType: true,
+          documentNumber: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      return {
+        success: true,
+        message: activate
+          ? 'Supplier activated successfully'
+          : 'Supplier deactivated successfully',
+        data: supplier,
+      };
+    } catch (error) {
+      this.handlePrismaError(error);
+    }
+  }
+
+  /**
+   * Builds the search query for suppliers based on provided filters
+   * @param query - Search parameters
+   * @returns Prisma where clause for supplier queries
+   * @private
+   */
+  private buildSupplierSearchQuery(query: SearchSupplierDto): any {
+    const { isActive, search } = query;
+    const where: any = {};
+
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -69,208 +265,55 @@ export class SuppliersService {
       ];
     }
 
-    const [suppliers, total] = await Promise.all([
-      this.prisma.supplier.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          products: {
-            where: { isActive: true },
-            select: {
-              id: true,
-              name: true,
-              currentStock: true,
-            },
-          },
-          _count: {
-            select: {
-              products: true,
-              inventoryMovements: true,
-            },
-          },
-        },
-      }),
-      this.prisma.supplier.count({ where }),
-    ]);
+    if (isActive !== undefined) {
+      where.isActive = isActive;
+    }
 
-    const totalPages = Math.ceil(total / limit);
-
-    return {
-      success: true,
-      data: suppliers,
-      pagination: {
-        currentPage: page,
-        totalPages,
-        totalItems: total,
-        itemsPerPage: limit,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1,
-      },
-    };
+    return where;
   }
 
-  async findOne(id: number) {
-    const supplier = await this.prisma.supplier.findUnique({
-      where: { id },
-      include: {
-        products: {
-          where: { isActive: true },
-          include: {
-            prices: {
-              where: { isCurrentPrice: true },
-              select: {
-                purchasePrice: true,
-                sellingPrice: true,
-              },
-            },
-          },
-        },
-        inventoryMovements: {
-          take: 10,
-          orderBy: { createdAt: 'desc' },
-          include: {
-            product: {
-              select: {
-                name: true,
-              },
-            },
-            user: {
-              select: {
-                firstName: true,
-                lastName: true,
-              },
-            },
-          },
-        },
-        _count: {
-          select: {
-            products: true,
-            inventoryMovements: true,
-          },
-        },
+  /**
+   * Checks if a supplier has any active products
+   * @param supplierId - ID of the supplier to check
+   * @returns Number of active products or false if none
+   * @private
+   */
+  private async checkForActiveProducts(
+    supplierId: number,
+  ): Promise<number | false> {
+    const activeProducts = await this.prisma.product.count({
+      where: {
+        supplierId,
+        isActive: true,
       },
     });
-
-    if (!supplier) {
-      throw new NotFoundException('Supplier not found');
-    }
-
-    return {
-      success: true,
-      data: supplier,
-    };
+    return activeProducts > 0 ? activeProducts : false;
   }
 
-  async update(id: number, updateSupplierDto: UpdateSupplierDto) {
-    try {
-      const supplier = await this.prisma.supplier.update({
-        where: { id },
-        data: updateSupplierDto,
-        include: {
-          products: {
-            where: { isActive: true },
-            select: {
-              id: true,
-              name: true,
-              currentStock: true,
-            },
-          },
-          _count: {
-            select: {
-              products: true,
-              inventoryMovements: true,
-            },
-          },
-        },
-      });
-
-      return {
-        success: true,
-        message: 'Supplier updated successfully',
-        data: supplier,
-      };
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2025') {
+  /**
+   * Handles Prisma errors and throws appropriate HTTP exceptions
+   * @param error - Error to handle
+   * @throws Various HTTP exceptions based on the error type
+   * @private
+   */
+  private handlePrismaError(error: any): never {
+    if (error instanceof PrismaClientKnownRequestError) {
+      switch (error.code) {
+        case 'P2002':
+          throw new BadRequestException(
+            'A supplier with this information already exists',
+          );
+        case 'P2025':
           throw new NotFoundException('Supplier not found');
-        }
-        throw new BadRequestException(
-          'Error updating supplier: Invalid data provided',
-        );
+        case 'P2014':
+          throw new BadRequestException('Invalid relation data provided');
+        default:
+          throw new BadRequestException('Invalid data provided');
       }
-      throw error;
     }
-  }
 
-  async deactivate(id: number) {
-    try {
-      // Check if supplier has active products
-      const activeProducts = await this.prisma.product.count({
-        where: {
-          supplierId: id,
-          isActive: true,
-        },
-      });
-
-      if (activeProducts > 0) {
-        return {
-          success: false,
-          message: `Cannot deactivate supplier. There are ${activeProducts} active products associated with this supplier.`,
-          data: null,
-        };
-      }
-
-      const supplier = await this.prisma.supplier.update({
-        where: { id },
-        data: { isActive: false },
-        select: {
-          id: true,
-          name: true,
-          isActive: true,
-        },
-      });
-
-      return {
-        success: true,
-        message: 'Supplier deactivated successfully',
-        data: supplier,
-      };
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2025') {
-          throw new NotFoundException('Supplier not found');
-        }
-      }
-      throw error;
-    }
-  }
-
-  async reactivate(id: number) {
-    try {
-      const supplier = await this.prisma.supplier.update({
-        where: { id },
-        data: { isActive: true },
-        select: {
-          id: true,
-          name: true,
-          isActive: true,
-        },
-      });
-
-      return {
-        success: true,
-        message: 'Supplier reactivated successfully',
-        data: supplier,
-      };
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2025') {
-          throw new NotFoundException('Supplier not found');
-        }
-      }
-      throw error;
-    }
+    throw new InternalServerErrorException(
+      'An unexpected error occurred while processing your request',
+    );
   }
 }

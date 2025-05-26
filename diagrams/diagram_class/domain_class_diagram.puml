@@ -1,0 +1,80 @@
+@startuml "Diagrama de clases de dominio"
+title Diagrama de clases de dominio
+
+class Usuario {
+  - id : Long
+  - nombre : String
+  - correo : String
+  - contraseña : String
+  - rol : String
+  - estado : boolean
+  - fechaCreacion : Date
+}
+
+class Producto {
+  - id : Long
+  - nombre : String
+  - descripcion : String
+  - precio : Double
+  - stock : Integer
+  - imagenUrl : String
+}
+
+class Categoria {
+  - id : Long
+  - nombre : String
+  - descripcion : String
+}
+
+class Venta {
+  - id : Long
+  - fecha : Date
+  - estado : String
+  - total : Double
+}
+
+class DetalleVenta {
+  - id : Long
+  - cantidad : Integer
+  - precioUnitario : Double
+}
+
+class Comentario {
+  - id : Long
+  - contenido : String
+  - fecha : Date
+}
+
+class Favorito {
+  - id : Long
+  - fecha : Date
+}
+
+' Associations
+Usuario --> Comentario
+Usuario --> Favorito
+Usuario --> Venta
+
+Producto --> Comentario
+Producto --> Favorito
+Producto --> DetalleVenta
+
+Categoria --> Producto
+
+' Composition (strong ownership)
+Venta *-- DetalleVenta
+
+' Aggregation (weak ownership)
+Comentario o-- Usuario
+Comentario o-- Producto
+
+Favorito o-- Usuario
+Favorito o-- Producto
+
+Venta o-- Usuario
+
+DetalleVenta o-- Producto
+
+Producto o-- Categoria
+
+@enduml

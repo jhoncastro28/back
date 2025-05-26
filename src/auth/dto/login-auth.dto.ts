@@ -1,6 +1,22 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
 
+/**
+ * Data Transfer Object for user authentication
+ *
+ * Handles login credentials validation with:
+ * - Email format validation
+ * - Required field checks
+ * - Basic input sanitization
+ *
+ * @example
+ * ```typescript
+ * {
+ *   "email": "user@example.com",
+ *   "password": "userPassword123"
+ * }
+ * ```
+ */
 export class LoginAuthDto {
   @ApiProperty({
     example: 'user@example.com',

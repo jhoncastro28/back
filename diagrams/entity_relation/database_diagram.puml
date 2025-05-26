@@ -1,0 +1,148 @@
+@startuml "Diagrama Entidad - Relación"
+title Diagrama Entidad - Relación
+!define TABLE(name,desc) class name as "desc" << (T,#FFAAAA) >>
+!define PK(x) <b><color:#b8860b><&key> x</color></b>
+!define FK(x) <color:#aaaaaa><&key> x</color>
+
+entity User {
+  PK(id) : text
+  --
+  email : text
+  password : text
+  address : text
+  createdAt : timestamp(3)
+  firstName : text
+  isActive : boolean
+  lastName : text
+  phoneNumber : text
+  role : text
+  updatedAt : timestamp(3)
+}
+
+entity Client {
+  PK(id) : integer
+  --
+  name : text
+  email : text
+  phoneNumber : text
+  address : text
+  createdAt : timestamp(3)
+  updatedAt : timestamp(3)
+  documentNumber : text
+  documentType : "documenttype"
+  isActive : boolean
+}
+
+entity Supplier {
+  PK(id) : integer
+  --
+  name : text
+  contactName : text
+  email : text
+  phoneNumber : text
+  address : text
+  documentType : "documenttype"
+  documentNumber : text
+  isActive : boolean
+  createdAt : timestamp(3)
+  updatedAt : timestamp(3)
+}
+
+entity Sale {
+  PK(id) : integer
+  --
+  saleDate : timestamp(3)
+  totalAmount : numeric(10,2)
+  notes : text
+  FK(clientId) : integer
+  FK(userId) : text
+  createdAt : timestamp(3)
+  updatedAt : timestamp(3)
+}
+
+entity Product {
+  PK(id) : integer
+  --
+  name : text
+  description : text
+  minQuantity : integer
+  maxQuantity : integer
+  currentStock : integer
+  isActive : boolean
+  FK(supplierId) : integer
+  createdAt : timestamp(3)
+  updatedAt : timestamp(3)
+}
+
+entity SaleDetail {
+  PK(id) : integer
+  --
+  quantity : integer
+  unitPrice : numeric(10,2)
+  discountAmount : numeric(10,2)
+  subtotal : numeric(10,2)
+  FK(productId) : integer
+  FK(saleId) : integer
+  createdAt : timestamp(3)
+  updatedAt : timestamp(3)
+}
+
+entity InventoryMovement {
+  PK(id) : integer
+  --
+  type : "movementtype"
+  quantity : integer
+  reason : text
+  notes : text
+  movementDate : timestamp(3)
+  FK(productId) : integer
+  FK(supplierId) : integer
+  FK(userId) : text
+  FK(saleId) : integer
+  createdAt : timestamp(3)
+  updatedAt : timestamp(3)
+}
+
+entity Price {
+  PK(id) : integer
+  --
+  purchasePrice : numeric(10,2)
+  sellingPrice : numeric(10,2)
+  isCurrent : boolean
+  isActive : boolean
+  validFrom : timestamp(3)
+  validTo : timestamp(3)
+  createdAt : timestamp(3)
+  updatedAt : timestamp(3)
+  FK(productId) : integer
+}
+
+entity Discount {
+  PK(id) : integer
+  --
+  name : text
+  description : text
+  type : "discounttype"
+  value : numeric(10,2)
+  isActive : boolean
+  startDate : timestamp(3)
+  endDate : timestamp(3)
+  createdAt : timestamp(3)
+  updatedAt : timestamp(3)
+  FK(priceId) : integer
+}
+
+' Relationships
+User ||--o{ Sale : creates
+Client ||--o{ Sale : purchases
+Sale ||--o{ SaleDetail : contains
+Product ||--o{ SaleDetail : included_in
+Supplier ||--o{ Product : supplies
+Product ||--o{ InventoryMovement : affects
+Supplier ||--o{ InventoryMovement : involves
+User ||--o{ InventoryMovement : performs
+Sale ||--o{ InventoryMovement : generates
+Product ||--o{ Price : has_pricing
+Price ||--o{ Discount : has_discount
+
+@enduml
