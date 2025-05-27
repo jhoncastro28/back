@@ -1,8 +1,9 @@
+import { BadRequestException } from '@nestjs/common';
 import { PartialType } from '@nestjs/mapped-types';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsBoolean,
-  IsDateString,
   IsDecimal,
   IsEnum,
   IsOptional,
@@ -96,32 +97,34 @@ export class UpdateDiscountDto extends PartialType(CreateDiscountDto) {
   value?: number;
 
   @ApiPropertyOptional({
-    description: 'Start date of the discount (ISO string)',
-    example: '2024-06-15T00:00:00Z',
+    description: 'Start date of the discount',
+    example: '2024-01-01',
   })
-  @IsDateString(
-    {},
-    {
-      message:
-        'Start date must be a valid ISO date string (e.g., 2024-06-15T00:00:00Z)',
-    },
-  )
   @IsOptional()
-  startDate?: string;
+  @Transform(({ value }) => {
+    if (!value) return value;
+    const date = new Date(value);
+    if (isNaN(date.getTime())) {
+      throw new BadRequestException('Invalid date format. Use YYYY-MM-DD');
+    }
+    return date;
+  })
+  startDate?: Date;
 
   @ApiPropertyOptional({
-    description: 'End date of the discount (ISO string)',
-    example: '2024-08-15T23:59:59Z',
+    description: 'End date of the discount',
+    example: '2024-12-31',
   })
-  @IsDateString(
-    {},
-    {
-      message:
-        'End date must be a valid ISO date string (e.g., 2024-08-15T23:59:59Z)',
-    },
-  )
   @IsOptional()
-  endDate?: string;
+  @Transform(({ value }) => {
+    if (!value) return value;
+    const date = new Date(value);
+    if (isNaN(date.getTime())) {
+      throw new BadRequestException('Invalid date format. Use YYYY-MM-DD');
+    }
+    return date;
+  })
+  endDate?: Date;
 
   @ApiPropertyOptional({
     description: 'Whether the discount is active',

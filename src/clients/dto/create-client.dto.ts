@@ -46,15 +46,16 @@ export class CreateClientDto {
   email?: string;
 
   @ApiPropertyOptional({
-    example: '+573001234567',
-    description: 'Contact phone number in international format',
-    pattern: '^\+?[1-9]\d{1,14}$',
+    example: '+57 (300) 123-4567',
+    description: 'Contact phone number with optional special characters',
+    maxLength: 20,
   })
   @IsString({ message: 'Phone number must be a string' })
-  @Matches(/^\+?[1-9]\d{1,14}$/, {
+  @Matches(/^[\+\d\s\(\)\-\.]+$/, {
     message:
-      'Phone number must be in international format (e.g., +573001234567)',
+      'Phone number can only contain digits, spaces, parentheses, plus sign, hyphens and dots',
   })
+  @MaxLength(40, { message: 'Phone number cannot exceed 20 characters' })
   @IsOptional()
   phoneNumber?: string;
 

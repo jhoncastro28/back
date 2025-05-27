@@ -1,4 +1,4 @@
-import { MovementType } from '../dto/inventory-movement.types';
+import { MovementType } from '../dto/create-inventory-movement.dto';
 
 export interface IProduct {
   id: number;

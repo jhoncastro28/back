@@ -20,7 +20,6 @@ import {
 import { ToggleActiveService } from '../common/services/toggle-active.service';
 import { AuthService } from './auth.service';
 import { Public, Roles } from './decorators';
-import { PublicRateLimit } from './decorators/throttler.decorator';
 import {
   CreateAuthDto,
   FilterUserDto,
@@ -78,7 +77,7 @@ export class AuthController {
     description: 'Too Many Requests - Rate limit exceeded',
   })
   @Public()
-  @PublicRateLimit(3, 60000)
+  // @PublicRateLimit(3, 60000)
   @Post('signup')
   signup(@Body() createAuthDto: CreateAuthDto) {
     return this.authService.signup(createAuthDto);
@@ -103,7 +102,7 @@ export class AuthController {
     description: 'Too Many Requests - Rate limit exceeded',
   })
   @Public()
-  @PublicRateLimit(5, 60000)
+  // @PublicRateLimit(5, 60000)
   @Post('login')
   login(@Body() loginAuthDto: LoginAuthDto) {
     return this.authService.login(loginAuthDto);

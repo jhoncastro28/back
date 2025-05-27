@@ -22,6 +22,14 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     }
 
     const request = context.switchToHttp().getRequest();
+
+    if (request.url.startsWith('/mobile/client')) {
+      this.logger.debug(
+        `Skipping global JWT guard for mobile route: ${request.url}`,
+      );
+      return true;
+    }
+
     this.logger.debug(`Checking auth for ${request.method} ${request.url}`);
 
     const authHeader = request.headers.authorization;

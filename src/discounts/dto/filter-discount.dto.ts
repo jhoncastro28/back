@@ -1,8 +1,8 @@
+import { BadRequestException } from '@nestjs/common';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
-  IsDateString,
   IsEnum,
   IsInt,
   IsOptional,
@@ -93,59 +93,63 @@ export class FilterDiscountDto extends PaginationDto {
 
   @ApiPropertyOptional({
     description: 'Filter by start date (from)',
-    example: '2024-06-01T00:00:00Z',
+    example: '2024-01-01',
   })
-  @IsDateString(
-    {},
-    {
-      message:
-        'Start date (from) must be a valid ISO date string (e.g., 2024-06-01T00:00:00Z)',
-    },
-  )
   @IsOptional()
-  startDateFrom?: string;
+  @Transform(({ value }) => {
+    if (!value) return value;
+    const date = new Date(value);
+    if (isNaN(date.getTime())) {
+      throw new BadRequestException('Invalid date format. Use YYYY-MM-DD');
+    }
+    return date;
+  })
+  startDateFrom?: Date;
 
   @ApiPropertyOptional({
     description: 'Filter by start date (to)',
-    example: '2024-08-31T23:59:59Z',
+    example: '2024-12-31',
   })
-  @IsDateString(
-    {},
-    {
-      message:
-        'Start date (to) must be a valid ISO date string (e.g., 2024-08-31T23:59:59Z)',
-    },
-  )
   @IsOptional()
-  startDateTo?: string;
+  @Transform(({ value }) => {
+    if (!value) return value;
+    const date = new Date(value);
+    if (isNaN(date.getTime())) {
+      throw new BadRequestException('Invalid date format. Use YYYY-MM-DD');
+    }
+    return date;
+  })
+  startDateTo?: Date;
 
   @ApiPropertyOptional({
     description: 'Filter by end date (from)',
-    example: '2024-06-01T00:00:00Z',
+    example: '2024-01-01',
   })
-  @IsDateString(
-    {},
-    {
-      message:
-        'End date (from) must be a valid ISO date string (e.g., 2024-06-01T00:00:00Z)',
-    },
-  )
   @IsOptional()
-  endDateFrom?: string;
+  @Transform(({ value }) => {
+    if (!value) return value;
+    const date = new Date(value);
+    if (isNaN(date.getTime())) {
+      throw new BadRequestException('Invalid date format. Use YYYY-MM-DD');
+    }
+    return date;
+  })
+  endDateFrom?: Date;
 
   @ApiPropertyOptional({
     description: 'Filter by end date (to)',
-    example: '2024-08-31T23:59:59Z',
+    example: '2024-12-31',
   })
-  @IsDateString(
-    {},
-    {
-      message:
-        'End date (to) must be a valid ISO date string (e.g., 2024-08-31T23:59:59Z)',
-    },
-  )
   @IsOptional()
-  endDateTo?: string;
+  @Transform(({ value }) => {
+    if (!value) return value;
+    const date = new Date(value);
+    if (isNaN(date.getTime())) {
+      throw new BadRequestException('Invalid date format. Use YYYY-MM-DD');
+    }
+    return date;
+  })
+  endDateTo?: Date;
 
   @ApiPropertyOptional({
     description: 'Filter by current validity (active and within date range)',

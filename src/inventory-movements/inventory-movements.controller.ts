@@ -25,9 +25,9 @@ import { Role } from '../auth/interfaces';
 import {
   CreateInventoryMovementDto,
   FilterInventoryMovementDto,
+  MovementType,
   UpdateInventoryMovementDto,
 } from './dto';
-import { MovementType } from './dto/inventory-movement.types';
 import {
   InventoryMovementResponseEntity,
   PaginatedInventoryMovementsResponseEntity,

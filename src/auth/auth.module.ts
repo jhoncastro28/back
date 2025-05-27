@@ -68,6 +68,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
   providers: [
     AuthService,
     SessionService,
+
     JwtStrategy,
     {
       provide: APP_GUARD,

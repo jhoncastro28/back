@@ -50,7 +50,7 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as compression from 'compression';
-import rateLimit from 'express-rate-limit';
+// import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -63,14 +63,14 @@ async function bootstrap() {
 
   // Security Middleware
   app.use(helmet());
-  if (envs.nodeEnv === 'production') {
-    app.use(
-      rateLimit({
-        windowMs: 15 * 60 * 1000, // 15 minutes
-        max: 1000, // limit each IP to 1000 requests per windowMs
-      }),
-    );
-  }
+  // if (envs.nodeEnv === 'production') {
+  //   app.use(
+  //     rateLimit({
+  //       windowMs: 15 * 60 * 1000, // 15 minutes
+  //       max: 1000, // limit each IP to 1000 requests per windowMs
+  //     }),
+  //   );
+  // }
 
   // CORS Configuration
   const corsOptions = {

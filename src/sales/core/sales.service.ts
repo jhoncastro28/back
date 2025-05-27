@@ -96,27 +96,55 @@ export class SalesService {
         );
       }
 
+      const price = await this.prisma.price.findFirst({
+        where: { productId: detail.productId, isCurrentPrice: true },
+      });
+
+      if (!price) {
+        throw new NotFoundException(
+          `Price not found for product ${detail.productId}`,
+        );
+      }
+
       const subtotal =
-        detail.unitPrice * detail.quantity - (detail.discountAmount || 0);
+        // detail.unitPrice * detail.quantity - (detail.discountAmount || 0);
+        Number(price.sellingPrice) * detail.quantity -
+        (detail.discountAmount || 0);
       totalAmount += subtotal;
     }
 
+    if (totalAmount <= 0) {
+      throw new BadRequestException('Total amount must be greater than zero');
+    }
+
+    // Create the sale and its details in a transaction
+
     return this.prisma.$transaction(async (prisma) => {
+      const saleDetailsData = [];
+
+      for (const detail of details) {
+        const price = await prisma.price.findFirst({
+          where: { productId: detail.productId, isCurrentPrice: true },
+        });
+
+        saleDetailsData.push({
+          quantity: detail.quantity,
+          unitPrice: Number(price.sellingPrice),
+          discountAmount: detail.discountAmount,
+          subtotal:
+            Number(price.sellingPrice) * detail.quantity -
+            (detail.discountAmount || 0),
+          productId: detail.productId,
+        });
+      }
+
       const sale = await prisma.sale.create({
         data: {
           ...saleData,
           userId,
           totalAmount,
           saleDetails: {
-            create: details.map((detail) => ({
-              quantity: detail.quantity,
-              unitPrice: detail.unitPrice,
-              discountAmount: detail.discountAmount,
-              subtotal:
-                detail.unitPrice * detail.quantity -
-                (detail.discountAmount || 0),
-              productId: detail.productId,
-            })),
+            create: saleDetailsData,
           },
         },
         include: {

@@ -126,8 +126,8 @@ describe('DiscountsService', () => {
         description: 'Special summer discount',
         type: DiscountType.PERCENTAGE,
         value: 10,
-        startDate: '2024-06-01',
-        endDate: '2024-08-31',
+        startDate: new Date('2024-06-01'),
+        endDate: new Date('2024-08-31'),
         priceId: 1,
       };
 
@@ -166,8 +166,8 @@ describe('DiscountsService', () => {
           type: DiscountType.PERCENTAGE,
           value: 10,
           priceId: 1,
-          startDate: '2024-06-01',
-          endDate: '2024-08-31',
+          startDate: new Date('2024-06-01'),
+          endDate: new Date('2024-08-31'),
         }),
       ).rejects.toThrow(NotFoundException);
     });
@@ -240,10 +240,10 @@ describe('DiscountsService', () => {
       jest.spyOn(prismaService.discount, 'count').mockResolvedValue(1);
 
       const result = await service.findAll({
-        startDateFrom: '2024-01-01',
-        startDateTo: '2024-12-31',
-        endDateFrom: '2024-06-01',
-        endDateTo: '2024-12-31',
+        startDateFrom: new Date('2024-01-01'),
+        startDateTo: new Date('2024-12-31'),
+        endDateFrom: new Date('2024-06-01'),
+        endDateTo: new Date('2024-12-31'),
       });
 
       expect(prismaService.discount.findMany).toHaveBeenCalledWith(
@@ -306,7 +306,7 @@ describe('DiscountsService', () => {
       const result = await service.update(1, {
         name: 'Extended Summer Sale',
         description: 'Extended special summer discount',
-        endDate: '2024-09-30',
+        endDate: new Date('2024-09-30'),
       });
 
       expect(prismaService.discount.update).toHaveBeenCalledWith({

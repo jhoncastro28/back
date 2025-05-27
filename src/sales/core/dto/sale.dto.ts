@@ -1,18 +1,55 @@
+import { BadRequestException } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
-  IsDateString,
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsPositive,
-  MaxDate,
+  IsString,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
-import { CreateSaleDetailDto } from '../../details/dto/sale-detail.dto';
+
+export class CreateDetailDto {
+  @ApiProperty({
+    description: 'Product ID to be sold',
+    example: 1,
+  })
+  @IsInt()
+  @IsPositive()
+  @IsNotEmpty()
+  @Type(() => Number)
+  productId: number;
+
+  @ApiProperty({
+    description: 'Quantity of products to be sold',
+    example: 2,
+    minimum: 1,
+    maximum: 9999,
+  })
+  @IsInt()
+  @IsPositive()
+  @Max(9999, { message: 'Quantity cannot exceed 9999 units' })
+  @IsNotEmpty()
+  @Type(() => Number)
+  quantity: number;
+
+  @ApiPropertyOptional({
+    description: 'Discount amount applied to this product',
+    example: 10.0,
+    minimum: 0,
+  })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Type(() => Number)
+  discountAmount?: number;
+}
 
 export class CreateSaleDto {
   @ApiProperty({
@@ -26,16 +63,22 @@ export class CreateSaleDto {
 
   @ApiProperty({
     description: 'Date when the sale was made',
-    example: '2024-01-01T00:00:00Z',
+    example: '2024-01-01',
   })
-  @IsDateString()
   @IsNotEmpty()
-  @MaxDate(new Date(), { message: 'Sale date cannot be in the future' })
+  @Transform(({ value }) => {
+    if (!value) return value;
+    const date = new Date(value);
+    if (isNaN(date.getTime())) {
+      throw new BadRequestException('Invalid date format. Use YYYY-MM-DD');
+    }
+    return date;
+  })
   saleDate: Date;
 
   @ApiProperty({
     description: 'List of products to be sold',
-    type: [CreateSaleDetailDto],
+    type: [CreateDetailDto],
     minItems: 1,
   })
   @IsArray()
@@ -43,8 +86,16 @@ export class CreateSaleDto {
     message: 'At least one product must be included in the sale',
   })
   @ValidateNested({ each: true })
-  @Type(() => CreateSaleDetailDto)
-  details: CreateSaleDetailDto[];
+  @Type(() => CreateDetailDto)
+  details: CreateDetailDto[];
+
+  @ApiPropertyOptional({
+    description: 'Additional notes about the sale',
+    example: 'sale of seasonal products',
+  })
+  @IsString()
+  @IsOptional()
+  notes?: string;
 }
 
 export class UpdateSaleDto {
@@ -59,31 +110,57 @@ export class UpdateSaleDto {
 
   @ApiPropertyOptional({
     description: 'Date when the sale was made',
-    example: '2024-01-01T00:00:00Z',
+    example: '2024-01-01',
   })
   @IsOptional()
-  @IsDateString()
-  @MaxDate(new Date(), { message: 'Sale date cannot be in the future' })
+  @Transform(({ value }) => {
+    if (!value) return value;
+    const date = new Date(value);
+    if (isNaN(date.getTime())) {
+      throw new BadRequestException('Invalid date format. Use YYYY-MM-DD');
+    }
+    return date;
+  })
   saleDate?: Date;
+
+  @ApiPropertyOptional({
+    description: 'notes about the sale',
+    example: 'this is a sale of seasonal products',
+  })
+  @IsString()
+  @IsOptional()
+  notes?: string;
 }
 
 export class SaleFilterDto {
   @ApiPropertyOptional({
     description: 'Start date for filtering sales',
-    example: '2024-01-01T00:00:00Z',
+    example: '2024-01-01',
   })
   @IsOptional()
-  @IsDateString()
-  @Type(() => Date)
+  @Transform(({ value }) => {
+    if (!value) return value;
+    const date = new Date(value);
+    if (isNaN(date.getTime())) {
+      throw new BadRequestException('Invalid date format. Use YYYY-MM-DD');
+    }
+    return date;
+  })
   startDate?: Date;
 
   @ApiPropertyOptional({
     description: 'End date for filtering sales',
-    example: '2024-12-31T23:59:59Z',
+    example: '2024-01-01',
   })
   @IsOptional()
-  @IsDateString()
-  @Type(() => Date)
+  @Transform(({ value }) => {
+    if (!value) return value;
+    const date = new Date(value);
+    if (isNaN(date.getTime())) {
+      throw new BadRequestException('Invalid date format. Use YYYY-MM-DD');
+    }
+    return date;
+  })
   endDate?: Date;
 
   @ApiPropertyOptional({

@@ -105,8 +105,8 @@ describe('DiscountsController', () => {
         type: DiscountType.PERCENTAGE,
         value: 10,
         priceId: 1,
-        startDate: '2024-06-01',
-        endDate: '2024-08-31',
+        startDate: new Date('2024-06-01'),
+        endDate: new Date('2024-08-31'),
       };
 
       const result = await controller.create(createDto);
@@ -164,7 +164,7 @@ describe('DiscountsController', () => {
       const updateDto: UpdateDiscountDto = {
         name: 'Extended Summer Sale',
         description: 'Extended special summer discount',
-        endDate: '2024-09-30',
+        endDate: new Date('2024-09-30'),
       };
 
       const result = await controller.update(1, updateDto);

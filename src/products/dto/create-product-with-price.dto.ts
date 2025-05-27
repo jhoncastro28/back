@@ -1,7 +1,7 @@
-import { Type } from 'class-transformer';
+import { BadRequestException } from '@nestjs/common';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
-  IsDateString,
   IsDecimal,
   IsEnum,
   IsNotEmpty,
@@ -49,11 +49,25 @@ export class CreateDiscountDto {
   isActive?: boolean = true;
 
   @IsNotEmpty()
-  @IsDateString()
+  @Transform(({ value }) => {
+    if (!value) return value;
+    const date = new Date(value);
+    if (isNaN(date.getTime())) {
+      throw new BadRequestException('Invalid date format. Use YYYY-MM-DD');
+    }
+    return date;
+  })
   startDate: Date;
 
   @IsOptional()
-  @IsDateString()
+  @Transform(({ value }) => {
+    if (!value) return value;
+    const date = new Date(value);
+    if (isNaN(date.getTime())) {
+      throw new BadRequestException('Invalid date format. Use YYYY-MM-DD');
+    }
+    return date;
+  })
   endDate?: Date;
 }
 
